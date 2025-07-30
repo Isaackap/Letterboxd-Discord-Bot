@@ -12,3 +12,5 @@ wheels/
 .env
 discord.log
 *.html
+.vscode
+*.sql

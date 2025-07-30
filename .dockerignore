@@ -34,3 +34,5 @@ LICENSE
 README.md
 discord.log
 *.html
+.vscode
+*.sql
