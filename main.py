@@ -1,12 +1,24 @@
-import discord
+import discord, os, logging, psycopg2
 from discord.ext import commands
 from discord import app_commands
-import logging
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
+db_password = os.getenv("DB_PASSWORD")
+
+conn = psycopg2.connect(
+    host="localhost",
+    database="discordbotdb",
+    user="postgres",
+    password=db_password,
+    port='5433'
+)
+cur = conn.cursor()
+
+cur.close()
+conn.close()
+
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
