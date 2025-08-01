@@ -2,6 +2,7 @@ import discord, os, logging, psycopg2
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
+from scraping import firstScrape
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
@@ -35,10 +36,9 @@ async def on_ready():
 
 @bot.event
 async def on_guild_join(guild):
+    guild_id = guild.id
+    print(f"Joined new server: {guild.name} - {guild_id}")
     try:
-        guild_id = guild.id
-        print(f"Joined new server: {guild.name} - {guild_id}")
-
         conn = get_db_connection()
         cur = conn.cursor()
         query = """INSERT INTO discord_servers (server_id, user_count, updated_at)
@@ -49,30 +49,122 @@ async def on_guild_join(guild):
         cur.close()
         conn.close()
     except Exception as e:
-        print(e)
-    
+        print(f"Failed to add server {guild.name}, {guild_id} to database",e)
 
-# NEED TO UPDATE server_id.user_count AS WELL!!!!!!!!
-@bot.tree.command(name="add", description="Add a user")
-@app_commands.describe(arg = "Username:")
-async def add(interaction: discord.Interaction, arg: str):
+@bot.event
+async def on_guild_remove(guild):
+    guild_id = guild.id
+    print(f"Removed from server: {guild.name} - {guild_id}")
     try:
-        guild_id = interaction.guild.id
-
         conn = get_db_connection()
         cur = conn.cursor()
-        query = """INSERT INTO diary_users (profile_name, server_id, updated_at)
-        VALUES (%s, %s, now())
-        ON CONFLICT (profile_name, server_id) DO NOTHING;"""
-        cur.execute(query, (arg, guild_id))
+        delete_query = """DELETE FROM discord_servers
+        WHERE server_id = %s;"""
+        cur.execute(delete_query, (guild_id,))
         conn.commit()
         cur.close()
         conn.close()
+    except Exception as e:
+        print(f"Failed to remove server {guild.name}, {guild_id} to database",e)
 
-        await interaction.response.send_message(f"{arg} has been added to the list")
+
+    
+
+@bot.tree.command(name="add", description="Add a user")
+@app_commands.describe(arg = "Username:")
+async def add(interaction: discord.Interaction, arg: str):
+    guild_id = interaction.guild.id
+    profile_name = arg.lower()
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        insert_query = """INSERT INTO diary_users (profile_name, server_id, updated_at)
+        VALUES (%s, %s, now())
+        ON CONFLICT (profile_name, server_id) DO NOTHING;"""
+        cur.execute(insert_query, (profile_name, guild_id))
+
+        if cur.rowcount > 0:    # Checks if the insert_query execute before updating
+            result = firstScrape(profile_name)
+            if not result or result[0] is False:
+                conn.rollback()
+                await interaction.response.send_message(f"Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
+                cur.close()
+                conn.close()
+                return
+            _, film_title, film_release, film_rating, film_review = result
+            #print(film_title, film_release, film_rating, film_review)
+
+            server_update_query = """UPDATE discord_servers
+            SET user_count = user_count + 1, updated_at = now()
+            WHERE server_id = %s;"""
+            cur.execute(server_update_query, (guild_id,))
+            user_update_query = """UPDATE diary_users
+            SET last_entry = %s
+            WHERE profile_name = %s AND server_id = %s"""
+            cur.execute(user_update_query, (film_title, profile_name, guild_id))
+            conn.commit()
+            await interaction.response.send_message(f"{arg} has been added to the list")
+        else:
+            await interaction.response.send_message(f"{arg} is already in the list")
+        cur.close()
+        conn.close()
+
     except Exception as e:
         print("Error in /add command: ", e)
         await interaction.response.send_message("Failed to add user: " + arg, ephemeral= True)
 
+@bot.tree.command(name="remove", description="Remove a user")
+@app_commands.describe(arg="Username: ")
+async def remove(interaction: discord.interactions, arg: str):
+    guild_id = interaction.guild_id
+    profile_name = arg.lower()
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        delete_query = """DELETE FROM diary_users
+        WHERE profile_name = %s AND server_id = %s"""
+        cur.execute(delete_query, (profile_name, guild_id))
+
+        if cur.rowcount > 0:    # Checks if the insert_query execute before updating
+            update_query = """UPDATE discord_servers SET
+            user_count = user_count - 1, updated_at = now()
+            WHERE server_id = %s;"""
+            cur.execute(update_query, (guild_id,))
+            conn.commit()
+            await interaction.response.send_message(f"{arg} has been removed from the list")
+        else:
+            await interaction.response.send_message(f"{arg} is not in the list")
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Error in /remove: ", e)
+        await interaction.response.send_message("An error occurred while removing the user.", ephemeral=True)
+
+@bot.tree.command(name="list", description="list all users")
+@app_commands.describe()
+async def list(interaction: discord.interactions):
+    guild_id = interaction.guild.id
+    user_list = []
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        get_query = """SELECT profile_name
+        FROM diary_users
+        WHERE server_id = %s"""
+        cur.execute(get_query, (guild_id,))
+        users = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not users:
+            await interaction.response.send_message("No users have been added yet.")
+        else:
+            user_list = "\n".join(user[0] for user in users)
+            await interaction.response.send_message(f"**Users in this server:**\n{user_list}")
+    except Exception as e:
+        print("Error printing list in ", e)
+        await interaction.response.send_message("An error occurred while retrieving user list.", ephemeral=True)
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
