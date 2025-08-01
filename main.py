@@ -108,8 +108,8 @@ async def add(interaction: discord.Interaction, arg: str):
             if film_rating:
                 float_rating = float(film_rating)
                 string_rating = ""
-                if isinstance(float_rating, int):
-                    for i in range(float_rating):
+                if float_rating % 1 == 0:
+                    for i in range(int(float_rating) // 2):
                         string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
                 else:
                     int_rating = math.floor(float_rating)
