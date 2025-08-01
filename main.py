@@ -1,6 +1,6 @@
-import discord, os, logging, psycopg2
+import discord, os, logging, psycopg2, math
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, Embed
 from dotenv import load_dotenv
 from scraping import firstScrape
 
@@ -104,7 +104,31 @@ async def add(interaction: discord.Interaction, arg: str):
             WHERE profile_name = %s AND server_id = %s"""
             cur.execute(user_update_query, (film_title, profile_name, guild_id))
             conn.commit()
-            await interaction.response.send_message(f"{arg} has been added to the list")
+
+            if film_rating:
+                float_rating = float(film_rating)
+                string_rating = ""
+                if isinstance(float_rating, int):
+                    for i in range(float_rating):
+                        string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
+                else:
+                    int_rating = math.floor(float_rating)
+                    for i in range(int_rating // 2):
+                        string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
+                    string_rating = string_rating + "<:79899letterboxdhalfstar:1400770001237184575>"
+
+            embed = Embed(
+                title=f"{film_title} ({film_release})",
+                description=f"Rating: {string_rating}",
+                color=0x1DB954  # Spotify green-ish, or choose any HEX color
+            )
+
+            if film_review:
+                embed.add_field(name="Review", value=film_review, inline=False)
+            else:
+                embed.add_field(name="Review", value="*No review provided.*", inline=False)
+
+            await interaction.response.send_message(f"{arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed)
         else:
             await interaction.response.send_message(f"{arg} is already in the list")
         cur.close()
