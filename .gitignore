@@ -14,3 +14,4 @@ discord.log
 *.html
 .vscode
 *.sql
+*.txt
