@@ -1,8 +1,8 @@
 import discord, os, logging, psycopg2, math
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
-from scraping import firstScrape
+from scraping import firstScrape, diaryScrape
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
@@ -81,6 +81,8 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")
+        if not diary_loop.is_running():
+            diary_loop.start()
     except Exception as e:
         print(e)
 
@@ -318,5 +320,71 @@ async def update_channel(interaction: discord.interactions, arg: TextChannel):
     except Exception as e:
         print("Error updating channel in ", guild_id, e)
         await interaction.response.send_message(f"❌ Failed to update default channel to {arg}.")
+
+### WORK IN PROGRESS ###
+@bot.tree.command(name="watchlistpick", description="Pick random film from watchlist")
+@app_commands.describe(arg="Username: ")
+async def watchlist_pick(interaction: discord.interactions, arg: str):
+    guild_id = interaction.guild.id
+    channel_id = interaction.channel.id
+
+    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    if channel_check == "no_exist":
+        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+        return
+    elif channel_check == "no_match":
+        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+        return
+
+    await interaction.response.send_message("This command currently does nothing")
+
+
+@tasks.loop(minutes=1)
+async def diary_loop():
+    print("Task loop has began")
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""SELECT sc.channel_id, sc.server_id, ds.user_count, du.profile_name, du.last_entry
+                    FROM server_channels sc
+                    JOIN discord_servers ds ON sc.server_id = ds.server_id
+                    JOIN diary_users du ON sc.server_id = du.server_id""")
+        results = cur.fetchall()
+
+        for channel_id, server_id, user_count, profile_name, last_entry in results:
+            try:
+                channel = await bot.fetch_channel(channel_id)
+                if isinstance(channel, discord.TextChannel):
+                    result = diaryScrape(user_count, profile_name, last_entry)
+                    if not result or result[0] is False:
+                        print("No diary updates")
+                        continue
+                    else:
+                        embed, film_title = build_embed_message(result)
+                        user_update_query = """UPDATE diary_users
+                        SET last_entry = %s
+                        WHERE profile_name = %s AND server_id = %s"""
+                        cur.execute(user_update_query, (film_title, profile_name, server_id))
+                        conn.commit()
+                        await channel.send(f"{profile_name}'s Diary Entry:\n", embed=embed)
+            except discord.NotFound:
+                print(f"Channel {channel_id} not found.")
+            except discord.Forbidden:
+                print(f"Missing permissions to send in channel {channel_id} of server {server_id}")
+            except Exception as e:
+                print(f"Error sending message to {channel_id}: {e}")
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print(f"Scheduled task failed: {e}")
+
+
+@diary_loop.before_loop
+async def before_diary_loop():
+    print("Waiting until bot is ready for task startup")
+    await bot.wait_until_ready()
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

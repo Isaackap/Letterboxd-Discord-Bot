@@ -2,10 +2,13 @@ from bs4 import BeautifulSoup
 import requests
 
 
-def filmTitle(data):
+def filmTitle(data, last_entry):
     title_name = data.find("a")
     if title_name:
-        return title_name.string
+        if title_name.string == last_entry:
+            return False
+        else:
+            return title_name.string
 
 def filmImage(data):
     img_tag = data.find("img")
@@ -82,6 +85,36 @@ def firstScrape(profile):
             return True, film_title, film_release, film_rating, film_review
         else:
             return "no_entry"
+    except Exception as e:
+        print(f"Error retrieving {profile} info: ", e)
+        return False
+    
+def diaryScrape(count, profile, entry):
+    url = f"https://letterboxd.com/{profile}/films/diary/"
+
+    try:
+        result = requests.get(url)
+        doc = BeautifulSoup(result.text, "html.parser")
+        user = doc.find(["title"])
+        if not user or "not found" in user.text.lower():
+            print(f"Invalid or non-existent user: {profile}")
+            return False
+        tbody = doc.tbody
+        if tbody:
+            trs = tbody.find_all("tr")
+            for tr in range(count):
+                date, details, released, rating, like, rewatch, review = trs[count].find_all("td")[1:8]
+                film_title = filmTitle(details, entry)
+                if film_title:
+                    film_release = filmRelease(released)
+                    film_rating = filmRating(rating)
+                    film_review = filmReview(review)
+                    #filmImage(details)
+                    return True, film_title, film_release, film_rating, film_review
+                else:
+                    return False
+        else:
+            return False
     except Exception as e:
         print(f"Error retrieving {profile} info: ", e)
         return False
