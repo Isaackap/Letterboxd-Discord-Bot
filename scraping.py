@@ -71,14 +71,17 @@ def firstScrape(profile):
             print(f"Invalid or non-existent user: {profile}")
             return False
         tbody = doc.tbody
-        trs = tbody.find_all("tr")
-        date, details, released, rating, like, rewatch, review = trs[0].find_all("td")[1:8]
-        film_title = filmTitle(details)
-        film_release = filmRelease(released)
-        film_rating = filmRating(rating)
-        film_review = filmReview(review)
-        #filmImage(details)
-        return True, film_title, film_release, film_rating, film_review
+        if tbody:
+            trs = tbody.find_all("tr")
+            date, details, released, rating, like, rewatch, review = trs[0].find_all("td")[1:8]
+            film_title = filmTitle(details)
+            film_release = filmRelease(released)
+            film_rating = filmRating(rating)
+            film_review = filmReview(review)
+            #filmImage(details)
+            return True, film_title, film_release, film_rating, film_review
+        else:
+            return "no_entry"
     except Exception as e:
         print(f"Error retrieving {profile} info: ", e)
         return False
