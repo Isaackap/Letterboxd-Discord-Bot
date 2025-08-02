@@ -17,6 +17,36 @@ def get_db_connection():
         port='5433'
     )
 
+def build_embed_message(data):
+    _, film_title, film_release, film_rating, film_review = data
+
+    if film_rating:
+        float_rating = float(film_rating) / 2
+        string_rating = ""
+        if float_rating % 1 == 0:
+            for i in range(int(float_rating)):
+                string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
+        else:
+            int_rating = math.floor(float_rating)
+            for i in range(int_rating):
+                string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
+            string_rating = string_rating + "<:79899letterboxdhalfstar:1400770001237184575>"
+        rating_embeded = f"Rating: {string_rating}"
+    else:
+        rating_embeded = "*No rating provided.*"
+
+    embed = Embed(
+        title=f"{film_title} ({film_release})",
+        description=rating_embeded,
+        color=0x1DB954
+    )
+
+    if film_review:
+        embed.add_field(name="Review", value=film_review, inline=False)
+    else:
+        embed.add_field(name="Review", value="*No review provided.*", inline=False)
+    return embed, film_title
+
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
 intents.message_content = True
@@ -92,8 +122,11 @@ async def add(interaction: discord.Interaction, arg: str):
                 cur.close()
                 conn.close()
                 return
-            _, film_title, film_release, film_rating, film_review = result
-            #print(film_title, film_release, film_rating, film_review)
+            else:
+                if result[0] is True:
+                    embed, film_title = build_embed_message(result)
+                else:
+                    film_title = result
 
             server_update_query = """UPDATE discord_servers
             SET user_count = user_count + 1, updated_at = now()
@@ -104,31 +137,10 @@ async def add(interaction: discord.Interaction, arg: str):
             WHERE profile_name = %s AND server_id = %s"""
             cur.execute(user_update_query, (film_title, profile_name, guild_id))
             conn.commit()
-
-            if film_rating:
-                float_rating = float(film_rating)
-                string_rating = ""
-                if float_rating % 1 == 0:
-                    for i in range(int(float_rating) // 2):
-                        string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
-                else:
-                    int_rating = math.floor(float_rating)
-                    for i in range(int_rating // 2):
-                        string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
-                    string_rating = string_rating + "<:79899letterboxdhalfstar:1400770001237184575>"
-
-            embed = Embed(
-                title=f"{film_title} ({film_release})",
-                description=f"Rating: {string_rating}",
-                color=0x1DB954  # Spotify green-ish, or choose any HEX color
-            )
-
-            if film_review:
-                embed.add_field(name="Review", value=film_review, inline=False)
+            if film_title == "no_entry":
+                await interaction.response.send_message(f"{arg} has been added to the list\n{arg} has no current entries.")
             else:
-                embed.add_field(name="Review", value="*No review provided.*", inline=False)
-
-            await interaction.response.send_message(f"{arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed)
+                await interaction.response.send_message(f"{arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed)
         else:
             await interaction.response.send_message(f"{arg} is already in the list")
         cur.close()
