@@ -346,17 +346,16 @@ async def diary_loop():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""SELECT sc.channel_id, sc.server_id, ds.user_count, du.profile_name, du.last_entry
+        cur.execute("""SELECT sc.channel_id, sc.server_id, du.profile_name, du.last_entry
                     FROM server_channels sc
-                    JOIN discord_servers ds ON sc.server_id = ds.server_id
                     JOIN diary_users du ON sc.server_id = du.server_id""")
         results = cur.fetchall()
 
-        for channel_id, server_id, user_count, profile_name, last_entry in results:
+        for channel_id, server_id, profile_name, last_entry in results:
             try:
                 channel = await bot.fetch_channel(channel_id)
                 if isinstance(channel, discord.TextChannel):
-                    result = diaryScrape(user_count, profile_name, last_entry)
+                    result = diaryScrape(profile_name, last_entry)
                     if not result or result[0] is False:
                         print("No diary updates")
                         continue

@@ -89,7 +89,7 @@ def firstScrape(profile):
         print(f"Error retrieving {profile} info: ", e)
         return False
     
-def diaryScrape(count, profile, entry):
+def diaryScrape(profile, entry):
     url = f"https://letterboxd.com/{profile}/films/diary/"
 
     try:
@@ -102,8 +102,8 @@ def diaryScrape(count, profile, entry):
         tbody = doc.tbody
         if tbody:
             trs = tbody.find_all("tr")
-            for tr in range(count):
-                date, details, released, rating, like, rewatch, review = trs[count].find_all("td")[1:8]
+            for tr in trs:
+                date, details, released, rating, like, rewatch, review = tr.find_all("td")[1:8]
                 film_title = filmTitle(details, entry)
                 if film_title:
                     film_release = filmRelease(released)
