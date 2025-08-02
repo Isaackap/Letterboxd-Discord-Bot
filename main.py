@@ -47,18 +47,25 @@ def build_embed_message(data):
         embed.add_field(name="Review", value="*No review provided.*", inline=False)
     return embed, film_title
 
-# def check_channel():
-#     if interaction.channel.id != stored_channel_id:
-#         await interaction.response.send_message(
-#             f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True
-#         )
-#         return
-#     if not stored_channel_id:
-#         await interaction.response.send_message(
-#             "❗ Bot is not configured for this server yet. Use `/setchannel` first.",
-#             ephemeral=True
-#         )
-#         return
+def check_channel(channel_id, guild_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    select_query = """SELECT channel_id
+    FROM server_channels
+    WHERE server_id = %s"""
+    cur.execute(select_query, (guild_id,))
+    channel = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not channel:
+        return "no_exist", None
+    
+    stored_channel_id = channel[0]
+    if  channel_id != stored_channel_id:
+        return "no_match", stored_channel_id
+    
+    return "ok", stored_channel_id
 
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
@@ -117,7 +124,20 @@ async def on_guild_remove(guild):
 @app_commands.describe(arg = "Username:")
 async def add(interaction: discord.Interaction, arg: str):
     guild_id = interaction.guild.id
+    channel_id = interaction.channel.id
     profile_name = arg.lower()
+    
+    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    if channel_check == "no_exist":
+        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+        return
+    elif channel_check == "no_match":
+        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+        return
+    
+    if len(profile_name) > 15 or len(profile_name) < 2:
+        await interaction.response.send_message(f"❌ Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
+        return
     
     try:
         conn = get_db_connection()
@@ -168,7 +188,21 @@ async def add(interaction: discord.Interaction, arg: str):
 @app_commands.describe(arg="Username: ")
 async def remove(interaction: discord.interactions, arg: str):
     guild_id = interaction.guild_id
+    channel_id = interaction.channel.id
     profile_name = arg.lower()
+
+    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    if channel_check == "no_exist":
+        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+        return
+    elif channel_check == "no_match":
+        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+        return
+
+    if len(profile_name) > 15 or len(profile_name) < 2:
+        await interaction.response.send_message(f"{arg} is not in the list")
+        return
+    
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -197,7 +231,17 @@ async def remove(interaction: discord.interactions, arg: str):
 @app_commands.describe()
 async def list(interaction: discord.interactions):
     guild_id = interaction.guild.id
+    channel_id = interaction.channel.id
     user_list = []
+
+    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    if channel_check == "no_exist":
+        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+        return
+    elif channel_check == "no_match":
+        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+        return
+
     try:
         conn = get_db_connection()
         cur = conn.cursor()
