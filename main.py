@@ -1,6 +1,6 @@
 import discord, os, logging, psycopg2, math
 from discord.ext import commands
-from discord import app_commands, Embed
+from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
 from scraping import firstScrape
 
@@ -47,6 +47,20 @@ def build_embed_message(data):
         embed.add_field(name="Review", value="*No review provided.*", inline=False)
     return embed, film_title
 
+# def check_channel():
+#     if interaction.channel.id != stored_channel_id:
+#         await interaction.response.send_message(
+#             f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True
+#         )
+#         return
+#     if not stored_channel_id:
+#         await interaction.response.send_message(
+#             "❗ Bot is not configured for this server yet. Use `/setchannel` first.",
+#             ephemeral=True
+#         )
+#         return
+
+
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
 intents.message_content = True
@@ -81,6 +95,7 @@ async def on_guild_join(guild):
     except Exception as e:
         print(f"Failed to add server {guild.name}, {guild_id} to database",e)
 
+
 @bot.event
 async def on_guild_remove(guild):
     guild_id = guild.id
@@ -97,8 +112,6 @@ async def on_guild_remove(guild):
     except Exception as e:
         print(f"Failed to remove server {guild.name}, {guild_id} to database",e)
 
-
-    
 
 @bot.tree.command(name="add", description="Add a user")
 @app_commands.describe(arg = "Username:")
@@ -118,7 +131,7 @@ async def add(interaction: discord.Interaction, arg: str):
             result = firstScrape(profile_name)
             if not result or result[0] is False:
                 conn.rollback()
-                await interaction.response.send_message(f"Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
+                await interaction.response.send_message(f"❌ Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
                 cur.close()
                 conn.close()
                 return
@@ -138,9 +151,9 @@ async def add(interaction: discord.Interaction, arg: str):
             cur.execute(user_update_query, (film_title, profile_name, guild_id))
             conn.commit()
             if film_title == "no_entry":
-                await interaction.response.send_message(f"{arg} has been added to the list\n{arg} has no current entries.")
+                await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg} has no current entries.")
             else:
-                await interaction.response.send_message(f"{arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed)
+                await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed)
         else:
             await interaction.response.send_message(f"{arg} is already in the list")
         cur.close()
@@ -148,7 +161,8 @@ async def add(interaction: discord.Interaction, arg: str):
 
     except Exception as e:
         print("Error in /add command: ", e)
-        await interaction.response.send_message("Failed to add user: " + arg, ephemeral= True)
+        await interaction.response.send_message("❌ Failed to add user: " + arg, ephemeral= True)
+
 
 @bot.tree.command(name="remove", description="Remove a user")
 @app_commands.describe(arg="Username: ")
@@ -168,7 +182,7 @@ async def remove(interaction: discord.interactions, arg: str):
             WHERE server_id = %s;"""
             cur.execute(update_query, (guild_id,))
             conn.commit()
-            await interaction.response.send_message(f"{arg} has been removed from the list")
+            await interaction.response.send_message(f"✅ {arg} has been removed from the list")
         else:
             await interaction.response.send_message(f"{arg} is not in the list")
 
@@ -176,9 +190,10 @@ async def remove(interaction: discord.interactions, arg: str):
         conn.close()
     except Exception as e:
         print("Error in /remove: ", e)
-        await interaction.response.send_message("An error occurred while removing the user.", ephemeral=True)
+        await interaction.response.send_message("❌ An error occurred while removing the user.", ephemeral=True)
 
-@bot.tree.command(name="list", description="list all users")
+
+@bot.tree.command(name="list", description="List all users")
 @app_commands.describe()
 async def list(interaction: discord.interactions):
     guild_id = interaction.guild.id
@@ -195,12 +210,69 @@ async def list(interaction: discord.interactions):
         conn.close()
 
         if not users:
-            await interaction.response.send_message("No users have been added yet.")
+            await interaction.response.send_message("No users have been added yet. Use `/add` to add users.")
         else:
             user_list = "\n".join(user[0] for user in users)
             await interaction.response.send_message(f"**Users in this server:**\n{user_list}")
     except Exception as e:
         print("Error printing list in ", e)
-        await interaction.response.send_message("An error occurred while retrieving user list.", ephemeral=True)
+        await interaction.response.send_message("❌ An error occurred while retrieving user list.", ephemeral=True)
+
+
+@bot.tree.command(name="setchannel", description="Set the default channel (Text)")
+@app_commands.describe(arg="Channel name")
+async def set_channel(interaction: discord.interactions, arg: TextChannel):
+    guild_id = interaction.guild_id
+    channel_id = arg.id
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        check_query = """SELECT 1 FROM server_channels WHERE server_id = %s"""
+        cur.execute(check_query, (guild_id,))
+        exists = cur.fetchone()
+        if exists:
+            await interaction.response.send_message("❌ A default channel is already set for this server. Use `/updatechannel` to change it.", ephemeral=True)
+        else:
+            insert_query = """INSERT INTO server_channels (channel_id, server_id, updated_at)
+            VALUES (%s, %s, now())
+            ON CONFLICT (channel_id, server_id) DO NOTHING"""
+            cur.execute(insert_query, (channel_id, guild_id))
+            if cur.rowcount > 0:
+                conn.commit()
+                await interaction.response.send_message(f"✅ {arg} has been set as the default channel.")
+            else:
+                await interaction.response.send_message(f"{arg} is already set as the default channel.")
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Error setting channel in ", guild_id, e)
+        await interaction.response.send_message(f"❌ Failed to set {arg} as default channel.")
+
+
+@bot.tree.command(name="updatechannel", description="Change the default channel (Text)")
+@app_commands.describe(arg="Channel name")
+async def update_channel(interaction: discord.interactions, arg: TextChannel):
+    guild_id = interaction.guild_id
+    channel_id = arg.id
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        update_query = """UPDATE server_channels
+        SET channel_id = %s, updated_at = now()
+        WHERE server_id = %s"""
+        cur.execute(update_query, (channel_id, guild_id))
+
+        if cur.rowcount > 0:
+            conn.commit()
+            await interaction.response.send_message(f"✅ Default channel has be updated to {arg}")
+        else:
+            await interaction.response.send_message(f"No channel is set currently. Use `/setchannel` first.", ephemeral=True)
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Error updating channel in ", guild_id, e)
+        await interaction.response.send_message(f"❌ Failed to update default channel to {arg}.")
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
