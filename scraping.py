@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import requests
+from time import sleep
 
 
 def filmTitle(data, last_entry):
@@ -133,3 +134,57 @@ def diaryScrape(profile, entry):
     except Exception as e:
         print(f"Error retrieving {profile} info: ", e)
         return False
+    
+def watchlistScrape(profile):
+    base_url = f"https://letterboxd.com/{profile}/watchlist"
+    page = 1
+    titles = []
+
+    while True:
+        url = f"{base_url}/page/{page}/" if page > 1 else base_url
+        print(f"Scraping page {page} for {profile}...")
+
+        try:
+            response = requests.get(url)
+            if response.status_code != 200:
+                print(f"Failed to fetch page {page} (status {response.status_code})")
+                break
+            with open("raw_watchlist.html", "w+", encoding="utf-8") as f:
+                f.write(response.text)
+
+            doc = BeautifulSoup(response.text, "html.parser")
+            
+            section = doc.find("section", class_="section col-17 col-main js-watchlist-main-content")
+            if not section:
+                print("Couldn't find section")
+                break
+
+            ulist = section.find("ul", class_="poster-list")
+            if not ulist:
+                print("Couldn't find ul")
+                break
+
+            items = ulist.find_all("li", class_="poster-container")
+            if not items:
+                print("No list items found")
+                break
+
+            for item in items:
+                div = item.find("div")
+                if div:
+                    title = div['data-film-slug'].strip()
+                    print(title)
+                    titles.append(title)
+
+            page += 1
+            sleep(2.0)
+
+        except Exception as e:
+            print(f"Error scraping page {page}: {e}")
+            break
+
+    return titles
+
+if __name__ == "__main__":
+    list = watchlistScrape("isaackap")
+    print(list)
