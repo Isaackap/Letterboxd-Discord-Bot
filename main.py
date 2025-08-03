@@ -19,33 +19,54 @@ def get_db_connection():
 
 def build_embed_message(data):
     _, film_title, film_release, film_rating, film_review = data
+    embed_list = []
 
-    if film_rating:
-        float_rating = float(film_rating) / 2
-        string_rating = ""
-        if float_rating % 1 == 0:
-            for i in range(int(float_rating)):
-                string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
+    if isinstance(film_title, str):
+        film_title = [film_title]
+        film_release = [film_release]
+        film_rating = [film_rating]
+        film_review = [film_review]
+
+    latest_entry = film_title[0]
+
+    for i in range(len(film_title)):
+        title = film_title[i]
+        release = film_release[i]
+        rating = film_rating[i]
+        review = film_review[i]
+
+        if rating:
+            try:
+                float_rating = float(rating) / 2
+                stars = int(float_rating)
+                half_star = float_rating % 1 >= 0.5
+                
+                string_rating = "<:47925letterboxd1star:1400770061404340234>" * stars
+                if half_star:
+                    string_rating += "<:79899letterboxdhalfstar:1400770001237184575>"
+
+                rating_embeded = f"Rating: {string_rating}"
+            except ValueError:
+                rating_embeded = "*Invalid rating format.*"
         else:
-            int_rating = math.floor(float_rating)
-            for i in range(int_rating):
-                string_rating = string_rating + "<:47925letterboxd1star:1400770061404340234>"
-            string_rating = string_rating + "<:79899letterboxdhalfstar:1400770001237184575>"
-        rating_embeded = f"Rating: {string_rating}"
-    else:
-        rating_embeded = "*No rating provided.*"
+            rating_embeded = "*No rating provided.*"
 
-    embed = Embed(
-        title=f"{film_title} ({film_release})",
-        description=rating_embeded,
-        color=0x1DB954
-    )
+        film_slug = title.lower().replace(" ", "-")
+        embed = Embed(
+            title=f"{title} ({release})",
+            url=f"https://letterboxd.com/film/{film_slug}/",
+            description=rating_embeded,
+            color=0x1DB954
+        )
 
-    if film_review:
-        embed.add_field(name="Review", value=film_review, inline=False)
-    else:
-        embed.add_field(name="Review", value="*No review provided.*", inline=False)
-    return embed, film_title
+        embed.add_field(
+            name="Review",
+            value=review if review else "*No review provided.*",
+            inline=False
+        )
+        
+        embed_list.append(embed)
+    return embed_list, latest_entry
 
 def check_channel(channel_id, guild_id):
     conn = get_db_connection()
@@ -175,7 +196,7 @@ async def add(interaction: discord.Interaction, arg: str):
             if film_title == "no_entry":
                 await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg} has no current entries.")
             else:
-                await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed)
+                await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed[0])
         else:
             await interaction.response.send_message(f"{arg} is already in the list")
         cur.close()
@@ -366,7 +387,10 @@ async def diary_loop():
                         WHERE profile_name = %s AND server_id = %s"""
                         cur.execute(user_update_query, (film_title, profile_name, server_id))
                         conn.commit()
-                        await channel.send(f"{profile_name}'s Diary Entry:\n", embed=embed)
+
+                        await channel.send(f"{profile_name}'s Diary Entries:")
+                        for message in embed:
+                            await channel.send(embed=message)
             except discord.NotFound:
                 print(f"Channel {channel_id} not found.")
             except discord.Forbidden:

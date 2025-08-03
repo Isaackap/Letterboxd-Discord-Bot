@@ -77,7 +77,7 @@ def firstScrape(profile):
         if tbody:
             trs = tbody.find_all("tr")
             date, details, released, rating, like, rewatch, review = trs[0].find_all("td")[1:8]
-            film_title = filmTitle(details)
+            film_title = filmTitle(details, None)
             film_release = filmRelease(released)
             film_rating = filmRating(rating)
             film_review = filmReview(review)
@@ -91,6 +91,10 @@ def firstScrape(profile):
     
 def diaryScrape(profile, entry):
     url = f"https://letterboxd.com/{profile}/films/diary/"
+    film_title = []
+    film_release = []
+    film_rating = []
+    film_review = []
 
     try:
         result = requests.get(url)
@@ -99,22 +103,29 @@ def diaryScrape(profile, entry):
         if not user or "not found" in user.text.lower():
             print(f"Invalid or non-existent user: {profile}")
             return False
+        
         tbody = doc.tbody
+        first = True
         if tbody:
             trs = tbody.find_all("tr")
             for tr in trs:
                 date, details, released, rating, like, rewatch, review = tr.find_all("td")[1:8]
-                film_title = filmTitle(details, entry)
-                if film_title:
-                    film_release = filmRelease(released)
-                    film_rating = filmRating(rating)
-                    film_review = filmReview(review)
-                    #filmImage(details)
-                    return True, film_title, film_release, film_rating, film_review
-                else:
-                    return False
+                title = filmTitle(details, entry)
+                if not title:
+                    if first:
+                        return False
+                    else:
+                        break
+                film_title.append(title)
+                film_release.append(filmRelease(released))
+                film_rating.append(filmRating(rating))
+                film_review.append(filmReview(review))
+                #filmImage(details)
+                
+            return True, film_title, film_release, film_rating, film_review
         else:
             return False
+        
     except Exception as e:
         print(f"Error retrieving {profile} info: ", e)
         return False
