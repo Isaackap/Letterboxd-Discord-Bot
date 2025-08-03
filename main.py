@@ -141,6 +141,56 @@ async def on_guild_remove(guild):
         print(f"Failed to remove server {guild.name}, {guild_id} to database",e)
 
 
+@bot.tree.command(name="help", description="List all bot commands and their descriptions.")
+async def help_command(interaction: discord.Interaction):
+    embed = Embed(
+        title="🎬 Letterboxd Bot Help",
+        description="Here's a list of commands you can use with this bot:",
+        color=0x1DB954  # Letterboxd green
+    )
+
+    embed.add_field(
+        name="`/add <username>`",
+        value="Add a Letterboxd profile to this server's diary list (max 10 users).",
+        inline=False
+    )
+
+    embed.add_field(
+        name="`/remove <username>`",
+        value="Remove a Letterboxd profile from the server's diary list.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="`/list`",
+        value="List all usernames currently being tracked in this server.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="`/setchannel <#channel>`",
+        value="Set the default text channel where the bot can send messages and accept commands.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="`/updatechannel <#channel>`",
+        value="Change the default text channel where the bot can send messages and accept commands.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="`/help`",
+        value="Display this help message.",
+        inline=False
+    )
+
+    embed.set_footer(text="Note: Bot commands will only work in the configured channel.")
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
 @bot.tree.command(name="add", description="Add a user")
 @app_commands.describe(arg = "Username:")
 async def add(interaction: discord.Interaction, arg: str):
