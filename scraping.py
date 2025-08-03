@@ -4,11 +4,12 @@ import requests
 
 def filmTitle(data, last_entry):
     title_name = data.find("a")
-    if title_name:
-        if title_name.string == last_entry:
+    if title_name and title_name.string:
+        if last_entry and title_name.string == last_entry:
             return False
         else:
             return title_name.string
+    return False
 
 def filmImage(data):
     img_tag = data.find("img")
@@ -66,6 +67,7 @@ def scrapeSite(profile):
 # Also is used as a verification if the added username exist on Letterboxd
 def firstScrape(profile):
     url = f"https://letterboxd.com/{profile}/films/diary/"
+    UNMATCHABLE_TITLE = "__UNMATCHABLE__"
     try:
         result = requests.get(url)
         doc = BeautifulSoup(result.text, "html.parser")
@@ -77,7 +79,7 @@ def firstScrape(profile):
         if tbody:
             trs = tbody.find_all("tr")
             date, details, released, rating, like, rewatch, review = trs[0].find_all("td")[1:8]
-            film_title = filmTitle(details, None)
+            film_title = filmTitle(details, UNMATCHABLE_TITLE)
             film_release = filmRelease(released)
             film_rating = filmRating(rating)
             film_review = filmReview(review)
@@ -107,7 +109,7 @@ def diaryScrape(profile, entry):
         tbody = doc.tbody
         first = True
         if tbody:
-            trs = tbody.find_all("tr")
+            trs = tbody.find_all("tr")[:5]
             for tr in trs:
                 date, details, released, rating, like, rewatch, review = tr.find_all("td")[1:8]
                 title = filmTitle(details, entry)
@@ -116,6 +118,8 @@ def diaryScrape(profile, entry):
                         return False
                     else:
                         break
+                first = False
+                
                 film_title.append(title)
                 film_release.append(filmRelease(released))
                 film_rating.append(filmRating(rating))

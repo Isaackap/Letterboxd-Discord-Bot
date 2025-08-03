@@ -51,10 +51,8 @@ def build_embed_message(data):
         else:
             rating_embeded = "*No rating provided.*"
 
-        film_slug = title.lower().replace(" ", "-")
         embed = Embed(
             title=f"{title} ({release})",
-            url=f"https://letterboxd.com/film/{film_slug}/",
             description=rating_embeded,
             color=0x1DB954
         )
@@ -165,6 +163,16 @@ async def add(interaction: discord.Interaction, arg: str):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        get_query = """SELECT COUNT(profile_name)
+        FROM diary_users
+        WHERE server_id = %s"""
+        cur.execute(get_query, (guild_id,))
+        
+        users_count = cur.fetchone()
+        if users_count[0] >= 10:
+            await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit (10). First remove a user with `/remove`")
+            return
+        
         insert_query = """INSERT INTO diary_users (profile_name, server_id, updated_at)
         VALUES (%s, %s, now())
         ON CONFLICT (profile_name, server_id) DO NOTHING;"""
@@ -273,6 +281,11 @@ async def list(interaction: discord.interactions):
         WHERE server_id = %s"""
         cur.execute(get_query, (guild_id,))
         users = cur.fetchall()
+        count_query = """SELECT COUNT(profile_name)
+        FROM diary_users
+        WHERE server_id = %s"""
+        cur.execute(count_query, (guild_id,))
+        users_count = cur.fetchone()
         cur.close()
         conn.close()
 
@@ -280,7 +293,7 @@ async def list(interaction: discord.interactions):
             await interaction.response.send_message("No users have been added yet. Use `/add` to add users.")
         else:
             user_list = "\n".join(user[0] for user in users)
-            await interaction.response.send_message(f"**Users in this server:**\n{user_list}")
+            await interaction.response.send_message(f"**Users in this server ({users_count[0]}):**\n{user_list}")
     except Exception as e:
         print("Error printing list in ", e)
         await interaction.response.send_message("❌ An error occurred while retrieving user list.", ephemeral=True)
@@ -357,10 +370,10 @@ async def watchlist_pick(interaction: discord.interactions, arg: str):
         await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
         return
 
-    await interaction.response.send_message("This command currently does nothing")
+    await interaction.response.send_message("This command is currently a work in progress")
 
 
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=3)
 async def diary_loop():
     print("Task loop has began")
 
@@ -378,7 +391,6 @@ async def diary_loop():
                 if isinstance(channel, discord.TextChannel):
                     result = diaryScrape(profile_name, last_entry)
                     if not result or result[0] is False:
-                        print("No diary updates")
                         continue
                     else:
                         embed, film_title = build_embed_message(result)
@@ -388,7 +400,7 @@ async def diary_loop():
                         cur.execute(user_update_query, (film_title, profile_name, server_id))
                         conn.commit()
 
-                        await channel.send(f"{profile_name}'s Diary Entries:")
+                        await channel.send(f"{profile_name}'s New Diary Entries:")
                         for message in embed:
                             await channel.send(embed=message)
             except discord.NotFound:
