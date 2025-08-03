@@ -373,7 +373,7 @@ async def watchlist_pick(interaction: discord.interactions, arg: str):
     await interaction.response.send_message("This command is currently a work in progress")
 
 
-@tasks.loop(minutes=3)
+@tasks.loop(minutes=20)
 async def diary_loop():
     print("Task loop has began")
 
