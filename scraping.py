@@ -2,6 +2,10 @@ from bs4 import BeautifulSoup
 import requests
 from time import sleep
 
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+    }  
+
 
 def filmTitle(data, last_entry):
     title_name = data.find("a")
@@ -41,7 +45,7 @@ def filmReview(data):
 def scrapeSite(profile):
     url = f"https://letterboxd.com/{profile}/films/diary/"
     try:
-        result = requests.get(url)
+        result = requests.get(url, headers=headers)
         doc = BeautifulSoup(result.text, "html.parser")
         # with open("index.html", "w") as file:
             # file.write(result.text)
@@ -70,7 +74,10 @@ def firstScrape(profile):
     url = f"https://letterboxd.com/{profile}/films/diary/"
     UNMATCHABLE_TITLE = "__UNMATCHABLE__"
     try:
-        result = requests.get(url)
+        result = requests.get(url, headers=headers)
+        if result.status_code != 200:
+                print(f"Failed to fetch page (status {result.status_code})")
+                return False
         doc = BeautifulSoup(result.text, "html.parser")
         user = doc.find(["title"])
         if not user or "not found" in user.text.lower():
@@ -98,9 +105,13 @@ def diaryScrape(profile, entry):
     film_release = []
     film_rating = []
     film_review = []
+    #sleep(5.0) 
 
     try:
-        result = requests.get(url)
+        result = requests.get(url, headers=headers)
+        if result.status_code != 200:
+                print(f"Failed to fetch page (status {result.status_code})")
+                return False
         doc = BeautifulSoup(result.text, "html.parser")
         user = doc.find(["title"])
         if not user or "not found" in user.text.lower():
@@ -116,6 +127,7 @@ def diaryScrape(profile, entry):
                 title = filmTitle(details, entry)
                 if not title:
                     if first:
+                        print("No new entries", profile)
                         return False
                     else:
                         break
@@ -134,6 +146,42 @@ def diaryScrape(profile, entry):
     except Exception as e:
         print(f"Error retrieving {profile} info: ", e)
         return False
+
+    
+def favoriteFilmsScrape(profile):
+    url = f"https://letterboxd.com/{profile}/"
+    titles = []
+
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+                print(f"Failed to fetch page (status {response.status_code})")
+                return False
+
+        doc = BeautifulSoup(response.text, "html.parser")
+
+        section = doc.find("section", id="favourites")
+        if not section:
+            print("Couldn't find section")
+            return False
+        
+        ulist = section.find("ul")
+        if not ulist:
+            return "No favorites"
+        else:
+            if ulist:
+                list_items = ulist.find_all("li", class_="poster-container favourite-film-poster-container")
+                for item in list_items:
+                    img = item.find("img")
+                    title = img["alt"]
+                    titles.append(title)
+        
+    except Exception as e:
+            print(f"Error scraping page {url}: {e}")
+            return False
+
+    return titles
+
     
 def watchlistScrape(profile):
     base_url = f"https://letterboxd.com/{profile}/watchlist"
@@ -145,7 +193,7 @@ def watchlistScrape(profile):
         print(f"Scraping page {page} for {profile}...")
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, headers=headers)
             if response.status_code != 200:
                 print(f"Failed to fetch page {page} (status {response.status_code})")
                 break
@@ -185,6 +233,8 @@ def watchlistScrape(profile):
 
     return titles
 
-if __name__ == "__main__":
-    list = watchlistScrape("isaackap")
-    print(list)
+# if __name__ == "__main__":
+#     #list = watchlistScrape("isaackap")
+    
+#     list = favoriteFilmsScrape("isaackap")
+#     print(list)

@@ -1,8 +1,8 @@
-import discord, os, logging, psycopg2, math
+import discord, os, logging, psycopg2, time, asyncio
 from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
-from scraping import firstScrape, diaryScrape
+from scraping import firstScrape, diaryScrape, favoriteFilmsScrape
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
@@ -146,7 +146,7 @@ async def help_command(interaction: discord.Interaction):
     embed = Embed(
         title="🎬 Letterboxd Bot Help",
         description="Here's a list of commands you can use with this bot:",
-        color=0x1DB954  # Letterboxd green
+        color=0x1DB954
     )
 
     embed.add_field(
@@ -176,6 +176,12 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="`/updatechannel <#channel>`",
         value="Change the default text channel where the bot can send messages and accept commands.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="`/favorites`",
+        value="List a Letterboxd profiles favorite films.",
         inline=False
     )
 
@@ -213,8 +219,8 @@ async def add(interaction: discord.Interaction, arg: str):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        get_query = """SELECT COUNT(profile_name)
-        FROM diary_users
+        get_query = """SELECT user_count
+        FROM discord_servers
         WHERE server_id = %s"""
         cur.execute(get_query, (guild_id,))
         
@@ -405,7 +411,46 @@ async def update_channel(interaction: discord.interactions, arg: TextChannel):
         print("Error updating channel in ", guild_id, e)
         await interaction.response.send_message(f"❌ Failed to update default channel to {arg}.")
 
-### WORK IN PROGRESS ###
+
+@bot.tree.command(name="favorites", description="Grab users favorite films")
+@app_commands.describe(arg="Username: ")
+async def favorite_films(interaction: discord.interactions, arg: str):
+    guild_id = interaction.guild.id
+    channel_id = interaction.channel.id
+
+    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    if channel_check == "no_exist":
+        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+        return
+    elif channel_check == "no_match":
+        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+        return
+
+    try:
+        results = favoriteFilmsScrape(arg)
+
+        if results == "No favorites":
+            await interaction.response.send_message(f"{arg} currently has no favorite films.")
+            return
+        elif not results:
+            await interaction.response.send_message("Failed to find users favorite films. Check spelling or try again later.", ephemeral=True)
+            return
+        
+        description = "\n".join(f"• {title}" for title in results)
+        embed = Embed(
+            title=f"{arg}'s Favorite Films",
+            description=description,
+            color=0x1DB954
+        )
+        
+        await interaction.response.send_message(embed=embed)
+
+    except Exception as e:
+        print("Error in /favorites: ", e)
+        await interaction.response.send_message("Failed to find users favorite films. Check spelling or try again later.", ephemeral=True)
+
+
+### WORK IN PROGRESS ### Might not be possible
 @bot.tree.command(name="watchlistpick", description="Pick random film from watchlist")
 @app_commands.describe(arg="Username: ")
 async def watchlist_pick(interaction: discord.interactions, arg: str):
@@ -419,11 +464,25 @@ async def watchlist_pick(interaction: discord.interactions, arg: str):
     elif channel_check == "no_match":
         await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
         return
+    
+    #results = await asyncio.to_thread(watchlistScrape, arg)
 
     await interaction.response.send_message("This command is currently a work in progress")
 
+def update_last_entry(server_id, profile_name, film_title):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE diary_users
+           SET last_entry = %s
+           WHERE profile_name = %s AND server_id = %s""",
+        (film_title, profile_name, server_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
-@tasks.loop(minutes=20)
+@tasks.loop(minutes=5)
 async def diary_loop():
     print("Task loop has began")
 
@@ -434,25 +493,26 @@ async def diary_loop():
                     FROM server_channels sc
                     JOIN diary_users du ON sc.server_id = du.server_id""")
         results = cur.fetchall()
+        cur.close()
+        conn.close()
 
         for channel_id, server_id, profile_name, last_entry in results:
+            await asyncio.sleep(1.0)
             try:
                 channel = await bot.fetch_channel(channel_id)
                 if isinstance(channel, discord.TextChannel):
-                    result = diaryScrape(profile_name, last_entry)
+                    result = await asyncio.to_thread(diaryScrape, profile_name, last_entry)
                     if not result or result[0] is False:
                         continue
                     else:
-                        embed, film_title = build_embed_message(result)
-                        user_update_query = """UPDATE diary_users
-                        SET last_entry = %s
-                        WHERE profile_name = %s AND server_id = %s"""
-                        cur.execute(user_update_query, (film_title, profile_name, server_id))
+                        embed, film_title = await asyncio.to_thread(build_embed_message, result)
+                        await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
                         conn.commit()
 
                         await channel.send(f"{profile_name}'s New Diary Entries:")
                         for message in embed:
                             await channel.send(embed=message)
+                            await asyncio.sleep(0.5)
             except discord.NotFound:
                 print(f"Channel {channel_id} not found.")
             except discord.Forbidden:
