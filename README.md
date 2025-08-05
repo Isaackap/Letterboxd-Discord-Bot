@@ -48,7 +48,7 @@ Removes a user from the tracking list.
 Displays the list of currently tracked Letterboxd users in the server.
 
 ### `/favorites <profile_name>`
-Post the Letterboxd user's favorite films listed on their profile page.
+Post the Letterboxd users' favorite films listed on their profile page.
 
 ### `/help`
 Displays a short help message outlining the commands and their use.
@@ -76,7 +76,7 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 
 ### Future updates currently planned. No guarantee they are added
 
-- `/watchlistpick <profile_name>` - grabs a user's watchlist and randomly selects one film from the list.
+- `/watchlistpick <profile_name>` - grabs a users' watchlist and randomly selects one film from the list.
 - Movie images. Currently images cannot be scraped from Letterboxd, will look into getting them some other way to include in posts.
 - `/film <film_name>` - grabs the info such as name, year, synopsis, director, or actors for a specified film.
 
@@ -86,7 +86,8 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 
 - The bot can only be used in the channel specified with `/setchannel`.
 - It only tracks users' **Diary** activity, not other types of interactions (e.g., likes or reviews outside of diary entries).
-- The `/add` command verifies that the Letterboxd profile exists and has at least one diary entry.
+- The `/add` command verifies that the Letterboxd profile exists. Make sure the profile name matches the profiles full name, not a display name (Can verify based on the url when viewing their profile).
 
 ---
+
 
