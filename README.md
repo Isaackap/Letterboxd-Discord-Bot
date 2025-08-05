@@ -87,7 +87,9 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 - The bot can only be used in the channel specified with `/setchannel`.
 - It only tracks users' **Diary** activity, not other types of interactions (e.g., likes or reviews outside of diary entries).
 - The `/add` command verifies that the Letterboxd profile exists. Make sure the profile name matches the profiles full name, not a display name (Can verify based on the url when viewing their profile).
+- Dockerfile was initialized, but never finished.
 
 ---
+
 
 
