@@ -3,10 +3,23 @@ from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
 from scraping import firstScrape, diaryScrape, favoriteFilmsScrape
+from google.cloud import secretmanager
 
-load_dotenv()
-token = os.getenv("DISCORD_TOKEN")
-db_password = os.getenv("DB_PASSWORD")
+# load_dotenv()
+# token = os.getenv("DISCORD_TOKEN")
+# db_password = os.getenv("DB_PASSWORD")
+
+def access_secret(project_id: str, secret_id: str, version: str = "latest") -> str:
+    client = secretmanager.SecretManagerServiceClient()
+    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version}"
+
+    response = client.access_secret_version(name=name)
+    secret_value = response.payload.data.decode("UTF-8")
+    return secret_value
+
+project_id = "discord-bit-468008"
+token = access_secret(project_id, "BotToken")   
+db_password = access_secret(project_id, "BotDatabasePassword")
 
 def get_db_connection():
     return psycopg2.connect(
@@ -14,7 +27,7 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5433'
+        port='5432'
     )
 
 def build_embed_message(data):
@@ -482,7 +495,7 @@ def update_last_entry(server_id, profile_name, film_title):
     cur.close()
     conn.close()
 
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=30)
 async def diary_loop():
     print("Task loop has began")
 

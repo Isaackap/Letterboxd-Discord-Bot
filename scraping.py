@@ -127,7 +127,7 @@ def diaryScrape(profile, entry):
                 title = filmTitle(details, entry)
                 if not title:
                     if first:
-                        print("No new entries", profile)
+                        #print("No new entries", profile)
                         return False
                     else:
                         break
