@@ -27,7 +27,7 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5432'
+        port='5432' #Change 5433 testing
     )
 
 def build_embed_message(data):
@@ -520,7 +520,6 @@ async def diary_loop():
                     else:
                         embed, film_title = await asyncio.to_thread(build_embed_message, result)
                         await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
-                        conn.commit()
 
                         await channel.send(f"{profile_name}'s New Diary Entries:")
                         for message in embed:
@@ -532,9 +531,6 @@ async def diary_loop():
                 print(f"Missing permissions to send in channel {channel_id} of server {server_id}")
             except Exception as e:
                 print(f"Error sending message to {channel_id}: {e}")
-
-        cur.close()
-        conn.close()
 
     except Exception as e:
         print(f"Scheduled task failed: {e}")
