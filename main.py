@@ -193,7 +193,7 @@ async def help_command(interaction: discord.Interaction):
     )
 
     embed.add_field(
-        name="`/favorites`",
+        name="`/favorites <username>`",
         value="List a Letterboxd profiles favorite films.",
         inline=False
     )
@@ -266,7 +266,7 @@ async def add(interaction: discord.Interaction, arg: str):
             WHERE server_id = %s;"""
             cur.execute(server_update_query, (guild_id,))
             user_update_query = """UPDATE diary_users
-            SET last_entry = %s
+            SET last_entry = %s, updated_at = now()
             WHERE profile_name = %s AND server_id = %s"""
             cur.execute(user_update_query, (film_title, profile_name, guild_id))
             conn.commit()
@@ -487,7 +487,7 @@ def update_last_entry(server_id, profile_name, film_title):
     cur = conn.cursor()
     cur.execute(
         """UPDATE diary_users
-           SET last_entry = %s
+           SET last_entry = %s, updated_at = now()
            WHERE profile_name = %s AND server_id = %s""",
         (film_title, profile_name, server_id)
     )
