@@ -126,17 +126,22 @@ async def on_ready():
 
         for guild in bot.guilds:
             if guild.id in missing_ids:
-                insert_query = """INSERT INTO discord_servers (server_id, user_count, updated_at)
-                                VALUES (%s, %s, now())
-                                ON CONFLICT (server_id) DO NOTHING;"""
-                cur.execute(insert_query, (guild.id, 0))
-                print(f"Added missed guild {guild.name} ({guild.id}) to database.")
+                try:
+                    insert_query = """INSERT INTO discord_servers (server_id, user_count, updated_at)
+                                    VALUES (%s, %s, now())
+                                    ON CONFLICT (server_id) DO NOTHING;"""
+                    cur.execute(insert_query, (guild.id, 0))
+                    print(f"Added missed guild {guild.name} ({guild.id}) to database.")
+                except psycopg2.Error as e:
+                    print(f"Failed to insert guild {guild.name} ({guild.id}): {e}")
+                else:
+                    conn.commit()
 
-        conn.commit()
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")
         if not diary_loop.is_running():
             diary_loop.start()
+    
     except Exception as e:
         print(e)
 
