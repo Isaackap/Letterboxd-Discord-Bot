@@ -6,7 +6,7 @@ from scraping import firstScrape, diaryScrape, favoriteFilmsScrape
 from google.cloud import secretmanager
 
 # load_dotenv()
-# token = os.getenv("DISCORD_TOKEN")
+# token = os.getenv("DISCORD_TOKEN_TEST")
 # db_password = os.getenv("DB_PASSWORD")
 
 def access_secret(project_id: str, secret_id: str, version: str = "latest") -> str:
@@ -122,6 +122,8 @@ async def on_ready():
 @bot.event
 async def on_guild_join(guild):
     guild_id = guild.id
+    conn = None
+    cur = None
     print(f"Joined new server: {guild.name} - {guild_id}")
     try:
         conn = get_db_connection()
@@ -131,15 +133,20 @@ async def on_guild_join(guild):
         ON CONFLICT (server_id) DO NOTHING;"""
         cur.execute(query, (guild_id, 0))
         conn.commit()
-        cur.close()
-        conn.close()
+
     except Exception as e:
         print(f"Failed to add server {guild.name}, {guild_id} to database",e)
+
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.event
 async def on_guild_remove(guild):
     guild_id = guild.id
+    conn = None
+    cur = None
     print(f"Removed from server: {guild.name} - {guild_id}")
     try:
         conn = get_db_connection()
@@ -148,10 +155,13 @@ async def on_guild_remove(guild):
         WHERE server_id = %s;"""
         cur.execute(delete_query, (guild_id,))
         conn.commit()
-        cur.close()
-        conn.close()
+    
     except Exception as e:
         print(f"Failed to remove server {guild.name}, {guild_id} to database",e)
+
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.tree.command(name="help", description="List all bot commands and their descriptions.")
@@ -215,6 +225,8 @@ async def help_command(interaction: discord.Interaction):
 async def add(interaction: discord.Interaction, arg: str):
     guild_id = interaction.guild.id
     channel_id = interaction.channel.id
+    conn = None
+    cur = None
     profile_name = arg.lower()
     
     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
@@ -239,6 +251,8 @@ async def add(interaction: discord.Interaction, arg: str):
         
         users_count = cur.fetchone()
         if users_count[0] >= 10:
+            cur.close()
+            conn.close()
             await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit (10). First remove a user with `/remove`")
             return
         
@@ -251,37 +265,44 @@ async def add(interaction: discord.Interaction, arg: str):
             result = firstScrape(profile_name)
             if not result or result[0] is False:
                 conn.rollback()
-                await interaction.response.send_message(f"❌ Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
                 cur.close()
                 conn.close()
+                await interaction.response.send_message(f"❌ Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
                 return
             else:
                 if result[0] is True:
                     embed, film_title = build_embed_message(result)
                 else:
                     film_title = result
+            try:
+                server_update_query = """UPDATE discord_servers
+                SET user_count = user_count + 1, updated_at = now()
+                WHERE server_id = %s;"""
+                cur.execute(server_update_query, (guild_id,))
+                user_update_query = """UPDATE diary_users
+                SET last_entry = %s, updated_at = now()
+                WHERE profile_name = %s AND server_id = %s"""
+                cur.execute(user_update_query, (film_title, profile_name, guild_id))
+            except psycopg2.Error as e:
+                print("Error during /add transaction: ", e)
+                conn.rollback()
+            else:
+                conn.commit()
 
-            server_update_query = """UPDATE discord_servers
-            SET user_count = user_count + 1, updated_at = now()
-            WHERE server_id = %s;"""
-            cur.execute(server_update_query, (guild_id,))
-            user_update_query = """UPDATE diary_users
-            SET last_entry = %s, updated_at = now()
-            WHERE profile_name = %s AND server_id = %s"""
-            cur.execute(user_update_query, (film_title, profile_name, guild_id))
-            conn.commit()
             if film_title == "no_entry":
                 await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg} has no current entries.")
             else:
                 await interaction.response.send_message(f"✅ {arg} has been added to the list\n{arg}'s most recent entry:\n",embed=embed[0])
         else:
             await interaction.response.send_message(f"{arg} is already in the list")
-        cur.close()
-        conn.close()
 
     except Exception as e:
         print("Error in /add command: ", e)
         await interaction.response.send_message("❌ Failed to add user: " + arg, ephemeral= True)
+
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.tree.command(name="remove", description="Remove a user")
@@ -289,6 +310,8 @@ async def add(interaction: discord.Interaction, arg: str):
 async def remove(interaction: discord.interactions, arg: str):
     guild_id = interaction.guild_id
     channel_id = interaction.channel.id
+    conn = None
+    cur = None
     profile_name = arg.lower()
 
     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
@@ -311,20 +334,28 @@ async def remove(interaction: discord.interactions, arg: str):
         cur.execute(delete_query, (profile_name, guild_id))
 
         if cur.rowcount > 0:    # Checks if the insert_query execute before updating
-            update_query = """UPDATE discord_servers SET
-            user_count = user_count - 1, updated_at = now()
-            WHERE server_id = %s;"""
-            cur.execute(update_query, (guild_id,))
-            conn.commit()
-            await interaction.response.send_message(f"✅ {arg} has been removed from the list")
+            try:
+                update_query = """UPDATE discord_servers SET
+                user_count = user_count - 1, updated_at = now()
+                WHERE server_id = %s;"""
+                cur.execute(update_query, (guild_id,))
+            except psycopg2.Error as e:
+                print("Error in /remove transaction: ", e)
+                conn.rollback()
+            else:
+                conn.commit()
+            finally:
+                await interaction.response.send_message(f"✅ {arg} has been removed from the list")
         else:
             await interaction.response.send_message(f"{arg} is not in the list")
 
-        cur.close()
-        conn.close()
     except Exception as e:
         print("Error in /remove: ", e)
         await interaction.response.send_message("❌ An error occurred while removing the user.", ephemeral=True)
+
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.tree.command(name="list", description="List all users")
@@ -332,6 +363,8 @@ async def remove(interaction: discord.interactions, arg: str):
 async def list(interaction: discord.interactions):
     guild_id = interaction.guild.id
     channel_id = interaction.channel.id
+    conn = None
+    cur = None
     user_list = []
 
     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
@@ -355,8 +388,6 @@ async def list(interaction: discord.interactions):
         WHERE server_id = %s"""
         cur.execute(count_query, (guild_id,))
         users_count = cur.fetchone()
-        cur.close()
-        conn.close()
 
         if not users:
             await interaction.response.send_message("No users have been added yet. Use `/add` to add users.")
@@ -367,12 +398,18 @@ async def list(interaction: discord.interactions):
         print("Error printing list in ", e)
         await interaction.response.send_message("❌ An error occurred while retrieving user list.", ephemeral=True)
 
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
 
 @bot.tree.command(name="setchannel", description="Set the default channel (Text)")
 @app_commands.describe(arg="Channel name")
 async def set_channel(interaction: discord.interactions, arg: TextChannel):
     guild_id = interaction.guild_id
     channel_id = arg.id
+    conn = None
+    cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -391,12 +428,16 @@ async def set_channel(interaction: discord.interactions, arg: TextChannel):
                 conn.commit()
                 await interaction.response.send_message(f"✅ {arg} has been set as the default channel.")
             else:
+                conn.rollback()
                 await interaction.response.send_message(f"{arg} is already set as the default channel.")
-        cur.close()
-        conn.close()
+        
     except Exception as e:
         print("Error setting channel in ", guild_id, e)
         await interaction.response.send_message(f"❌ Failed to set {arg} as default channel.")
+    
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.tree.command(name="updatechannel", description="Change the default channel (Text)")
@@ -404,6 +445,8 @@ async def set_channel(interaction: discord.interactions, arg: TextChannel):
 async def update_channel(interaction: discord.interactions, arg: TextChannel):
     guild_id = interaction.guild_id
     channel_id = arg.id
+    conn = None
+    cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -414,15 +457,18 @@ async def update_channel(interaction: discord.interactions, arg: TextChannel):
 
         if cur.rowcount > 0:
             conn.commit()
-            await interaction.response.send_message(f"✅ Default channel has be updated to {arg}")
+            await interaction.response.send_message(f"✅ Default channel has been updated to {arg}")
         else:
+            conn.rollback()
             await interaction.response.send_message(f"No channel is set currently. Use `/setchannel` first.", ephemeral=True)
 
-        cur.close()
-        conn.close()
     except Exception as e:
         print("Error updating channel in ", guild_id, e)
         await interaction.response.send_message(f"❌ Failed to update default channel to {arg}.")
+
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.tree.command(name="favorites", description="Grab users favorite films")
@@ -483,17 +529,24 @@ async def watchlist_pick(interaction: discord.interactions, arg: str):
     await interaction.response.send_message("This command is currently a work in progress")
 
 def update_last_entry(server_id, profile_name, film_title):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """UPDATE diary_users
-           SET last_entry = %s, updated_at = now()
-           WHERE profile_name = %s AND server_id = %s""",
-        (film_title, profile_name, server_id)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """UPDATE diary_users
+            SET last_entry = %s, updated_at = now()
+            WHERE profile_name = %s AND server_id = %s""",
+            (film_title, profile_name, server_id)
+        )
+        conn.commit()
+    except psycopg2.Error as e:
+        print("Error in diary loop update query: ", e)
+        conn.rollback()
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 @tasks.loop(minutes=30)
 async def diary_loop():
