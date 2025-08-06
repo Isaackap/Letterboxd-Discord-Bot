@@ -4,6 +4,7 @@ from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
 from scraping import firstScrape, diaryScrape, favoriteFilmsScrape
 from google.cloud import secretmanager
+from datetime import datetime
 
 # load_dotenv()
 # token = os.getenv("DISCORD_TOKEN_TEST")
@@ -110,13 +111,38 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
+    current_guild_ids = {guild.id for guild in bot.guilds}
+    conn = None
+    cur = None
+
     try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT server_id FROM discord_servers")
+        results = cur.fetchall()
+        stored_ids = {row[0] for row in results}
+
+        missing_ids = current_guild_ids - stored_ids
+
+        for guild in bot.guilds:
+            if guild.id in missing_ids:
+                insert_query = """INSERT INTO discord_servers (server_id, user_count, updated_at)
+                                VALUES (%s, %s, now())
+                                ON CONFLICT (server_id) DO NOTHING;"""
+                cur.execute(insert_query, (guild.id, 0))
+                print(f"Added missed guild {guild.name} ({guild.id}) to database.")
+
+        conn.commit()
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")
         if not diary_loop.is_running():
             diary_loop.start()
     except Exception as e:
         print(e)
+
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @bot.event
@@ -134,7 +160,7 @@ async def on_guild_join(guild):
         cur.execute(query, (guild_id, 0))
         conn.commit()
 
-    except Exception as e:
+    except psycopg2.Error as e:
         print(f"Failed to add server {guild.name}, {guild_id} to database",e)
 
     finally:
@@ -156,7 +182,7 @@ async def on_guild_remove(guild):
         cur.execute(delete_query, (guild_id,))
         conn.commit()
     
-    except Exception as e:
+    except psycopg2.Error as e:
         print(f"Failed to remove server {guild.name}, {guild_id} to database",e)
 
     finally:
@@ -250,7 +276,7 @@ async def add(interaction: discord.Interaction, arg: str):
         cur.execute(get_query, (guild_id,))
         
         users_count = cur.fetchone()
-        if users_count[0] >= 10:
+        if users_count[0] >= 50:
             cur.close()
             conn.close()
             await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit (10). First remove a user with `/remove`")
@@ -550,7 +576,7 @@ def update_last_entry(server_id, profile_name, film_title):
 
 @tasks.loop(minutes=30)
 async def diary_loop():
-    print("Task loop has began")
+    print("Task loop has began: ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     try:
         conn = get_db_connection()
@@ -587,6 +613,8 @@ async def diary_loop():
 
     except Exception as e:
         print(f"Scheduled task failed: {e}")
+
+    print("Task loop has finished: ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
 @diary_loop.before_loop
