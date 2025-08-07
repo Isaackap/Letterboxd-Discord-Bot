@@ -1,6 +1,8 @@
 from bs4 import BeautifulSoup
-import requests
+import requests, logging
 from time import sleep
+
+my_logger = logging.getLogger("mybot")
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
@@ -18,7 +20,7 @@ def filmTitle(data, last_entry):
 
 def filmImage(data):
     img_tag = data.find("img")
-    print(img_tag["src"])
+    my_logger.debug(img_tag["src"])
 
 def filmRelease(data):
     release_year = data.find("span")
@@ -52,9 +54,9 @@ def scrapeSite(profile):
         # with open("index.html", "r") as file:
         #     doc = BeautifulSoup(file, "html.parser")
         user = doc.find(["title"])
-        print((user.string.split("’")[0]).strip())
+        my_logger.debug((user.string.split("’")[0]).strip())
     except Exception as e:
-        print(e)
+        my_logger.error(f"Error in scrapeSite: {e}")
         return -1
     
     tbody = doc.tbody
@@ -76,12 +78,12 @@ def firstScrape(profile):
     try:
         result = requests.get(url, headers=headers)
         if result.status_code != 200:
-                print(f"Failed to fetch page (status {result.status_code})")
+                my_logger.error(f"Failed to fetch page (status {result.status_code})")
                 return False
         doc = BeautifulSoup(result.text, "html.parser")
         user = doc.find(["title"])
         if not user or "not found" in user.text.lower():
-            print(f"Invalid or non-existent user: {profile}")
+            my_logger.info(f"Invalid or non-existent user: {profile}")
             return False
         tbody = doc.tbody
         if tbody:
@@ -96,7 +98,7 @@ def firstScrape(profile):
         else:
             return "no_entry"
     except Exception as e:
-        print(f"Error retrieving {profile} info: ", e)
+        my_logger.error(f"Error retrieving {profile} info: {e}")
         return False
     
 def diaryScrape(profile, entry):
@@ -110,12 +112,12 @@ def diaryScrape(profile, entry):
     try:
         result = requests.get(url, headers=headers)
         if result.status_code != 200:
-                print(f"Failed to fetch page (status {result.status_code})")
+                my_logger.error(f"Failed to fetch page (status {result.status_code})")
                 return False
         doc = BeautifulSoup(result.text, "html.parser")
         user = doc.find(["title"])
         if not user or "not found" in user.text.lower():
-            print(f"Invalid or non-existent user: {profile}")
+            my_logger.info(f"Invalid or non-existent user: {profile}")
             return False
         
         tbody = doc.tbody
@@ -144,7 +146,7 @@ def diaryScrape(profile, entry):
             return False
         
     except Exception as e:
-        print(f"Error retrieving {profile} info: ", e)
+        my_logger.error(f"Error retrieving {profile} info: {e}")
         return False
 
     
@@ -155,14 +157,14 @@ def favoriteFilmsScrape(profile):
     try:
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-                print(f"Failed to fetch page (status {response.status_code})")
+                my_logger.error(f"Failed to fetch page (status {response.status_code})")
                 return False
 
         doc = BeautifulSoup(response.text, "html.parser")
 
         section = doc.find("section", id="favourites")
         if not section:
-            print("Couldn't find section")
+            my_logger.info("Couldn't find section")
             return False
         
         ulist = section.find("ul")
@@ -177,7 +179,7 @@ def favoriteFilmsScrape(profile):
                     titles.append(title)
         
     except Exception as e:
-            print(f"Error scraping page {url}: {e}")
+            my_logger.error(f"Error scraping page {url}: {e}")
             return False
 
     return titles
@@ -190,12 +192,12 @@ def watchlistScrape(profile):
 
     while True:
         url = f"{base_url}/page/{page}/" if page > 1 else base_url
-        print(f"Scraping page {page} for {profile}...")
+        my_logger.debug(f"Scraping page {page} for {profile}...")
 
         try:
             response = requests.get(url, headers=headers)
             if response.status_code != 200:
-                print(f"Failed to fetch page {page} (status {response.status_code})")
+                my_logger.error(f"Failed to fetch page {page} (status {response.status_code})")
                 break
             with open("raw_watchlist.html", "w+", encoding="utf-8") as f:
                 f.write(response.text)
@@ -204,31 +206,31 @@ def watchlistScrape(profile):
             
             section = doc.find("section", class_="section col-17 col-main js-watchlist-main-content")
             if not section:
-                print("Couldn't find section")
+                my_logger.debug("Couldn't find section")
                 break
 
             ulist = section.find("ul", class_="poster-list")
             if not ulist:
-                print("Couldn't find ul")
+                my_logger.debug("Couldn't find ul")
                 break
 
             items = ulist.find_all("li", class_="poster-container")
             if not items:
-                print("No list items found")
+                my_logger.debug("No list items found")
                 break
 
             for item in items:
                 div = item.find("div")
                 if div:
                     title = div['data-film-slug'].strip()
-                    print(title)
+                    my_logger.debug(title)
                     titles.append(title)
 
             page += 1
             sleep(2.0)
 
         except Exception as e:
-            print(f"Error scraping page {page}: {e}")
+            my_logger.error(f"Error scraping page {page}: {e}")
             break
 
     return titles

@@ -1,26 +1,18 @@
-import discord, os, logging, psycopg2, time, asyncio
+import discord, os, logging, psycopg2, asyncio, logging
 from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
 from scraping import firstScrape, diaryScrape, favoriteFilmsScrape
-from google.cloud import secretmanager
-from datetime import datetime
+from helper import build_embed_message, update_last_entry, check_channel, access_secret
 
 # load_dotenv()
 # token = os.getenv("DISCORD_TOKEN_TEST")
 # db_password = os.getenv("DB_PASSWORD")
 
-def access_secret(project_id: str, secret_id: str, version: str = "latest") -> str:
-    client = secretmanager.SecretManagerServiceClient()
-    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version}"
-
-    response = client.access_secret_version(name=name)
-    secret_value = response.payload.data.decode("UTF-8")
-    return secret_value
-
 project_id = "discord-bit-468008"
 token = access_secret(project_id, "BotToken")   
 db_password = access_secret(project_id, "BotDatabasePassword")
+
 
 def get_db_connection():
     return psycopg2.connect(
@@ -31,74 +23,16 @@ def get_db_connection():
         port='5432' #Change 5433 testing
     )
 
-def build_embed_message(data):
-    _, film_title, film_release, film_rating, film_review = data
-    embed_list = []
 
-    if isinstance(film_title, str):
-        film_title = [film_title]
-        film_release = [film_release]
-        film_rating = [film_rating]
-        film_review = [film_review]
+my_logger = logging.getLogger("mybot")
+my_logger.setLevel(logging.DEBUG)
 
-    latest_entry = film_title[0]
+handler = logging.FileHandler("mybot.log", mode="w")
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
 
-    for i in range(len(film_title)):
-        title = film_title[i]
-        release = film_release[i]
-        rating = film_rating[i]
-        review = film_review[i]
-
-        if rating:
-            try:
-                float_rating = float(rating) / 2
-                stars = int(float_rating)
-                half_star = float_rating % 1 >= 0.5
-                
-                string_rating = "<:47925letterboxd1star:1400770061404340234>" * stars
-                if half_star:
-                    string_rating += "<:79899letterboxdhalfstar:1400770001237184575>"
-
-                rating_embeded = f"Rating: {string_rating}"
-            except ValueError:
-                rating_embeded = "*Invalid rating format.*"
-        else:
-            rating_embeded = "*No rating provided.*"
-
-        embed = Embed(
-            title=f"{title} ({release})",
-            description=rating_embeded,
-            color=0x1DB954
-        )
-
-        embed.add_field(
-            name="Review",
-            value=review if review else "*No review provided.*",
-            inline=False
-        )
-        
-        embed_list.append(embed)
-    return embed_list, latest_entry
-
-def check_channel(channel_id, guild_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    select_query = """SELECT channel_id
-    FROM server_channels
-    WHERE server_id = %s"""
-    cur.execute(select_query, (guild_id,))
-    channel = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    if not channel:
-        return "no_exist", None
-    
-    stored_channel_id = channel[0]
-    if  channel_id != stored_channel_id:
-        return "no_match", stored_channel_id
-    
-    return "ok", stored_channel_id
+my_logger.addHandler(handler)
+my_logger.propagate = False
 
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
@@ -110,7 +44,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"We are ready to go in, {bot.user.name}")
+    my_logger.info(f"We are ready to go in, {bot.user.name}")
     current_guild_ids = {guild.id for guild in bot.guilds}
     conn = None
     cur = None
@@ -131,19 +65,19 @@ async def on_ready():
                                     VALUES (%s, %s, now())
                                     ON CONFLICT (server_id) DO NOTHING;"""
                     cur.execute(insert_query, (guild.id, 0))
-                    print(f"Added missed guild {guild.name} ({guild.id}) to database.")
+                    my_logger.info(f"Added missed guild {guild.name} ({guild.id}) to database.")
                 except psycopg2.Error as e:
-                    print(f"Failed to insert guild {guild.name} ({guild.id}): {e}")
+                    my_logger.error(f"Failed to insert guild {guild.name} ({guild.id}): {e}")
                 else:
                     conn.commit()
 
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
+        my_logger.info(f"Synced {len(synced)} command(s)")
         if not diary_loop.is_running():
             diary_loop.start()
     
     except Exception as e:
-        print(e)
+        my_logger.error(f"Error in on_ready event: {e}")
 
     finally:
         if cur: cur.close()
@@ -155,7 +89,7 @@ async def on_guild_join(guild):
     guild_id = guild.id
     conn = None
     cur = None
-    print(f"Joined new server: {guild.name} - {guild_id}")
+    my_logger.info(f"Joined new server: {guild.name} - {guild_id}")
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -166,7 +100,7 @@ async def on_guild_join(guild):
         conn.commit()
 
     except psycopg2.Error as e:
-        print(f"Failed to add server {guild.name}, {guild_id} to database",e)
+        my_logger.error(f"Failed to add server {guild.name}, {guild_id} to database: {e}")
 
     finally:
         if cur: cur.close()
@@ -178,7 +112,7 @@ async def on_guild_remove(guild):
     guild_id = guild.id
     conn = None
     cur = None
-    print(f"Removed from server: {guild.name} - {guild_id}")
+    my_logger.info(f"Removed from server: {guild.name} - {guild_id}")
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -188,7 +122,7 @@ async def on_guild_remove(guild):
         conn.commit()
     
     except psycopg2.Error as e:
-        print(f"Failed to remove server {guild.name}, {guild_id} to database",e)
+        my_logger.error(f"Failed to remove server {guild.name}, {guild_id} to database: {e}")
 
     finally:
         if cur: cur.close()
@@ -315,7 +249,7 @@ async def add(interaction: discord.Interaction, arg: str):
                 WHERE profile_name = %s AND server_id = %s"""
                 cur.execute(user_update_query, (film_title, profile_name, guild_id))
             except psycopg2.Error as e:
-                print("Error during /add transaction: ", e)
+                my_logger.error(f"Error during /add transaction: {e}")
                 conn.rollback()
             else:
                 conn.commit()
@@ -328,7 +262,7 @@ async def add(interaction: discord.Interaction, arg: str):
             await interaction.response.send_message(f"{arg} is already in the list")
 
     except Exception as e:
-        print("Error in /add command: ", e)
+        my_logger.error(f"Error in /add command: {e}")
         await interaction.response.send_message("❌ Failed to add user: " + arg, ephemeral= True)
 
     finally:
@@ -371,7 +305,7 @@ async def remove(interaction: discord.interactions, arg: str):
                 WHERE server_id = %s;"""
                 cur.execute(update_query, (guild_id,))
             except psycopg2.Error as e:
-                print("Error in /remove transaction: ", e)
+                my_logger.error(f"Error in /remove transaction: {e}")
                 conn.rollback()
             else:
                 conn.commit()
@@ -381,7 +315,7 @@ async def remove(interaction: discord.interactions, arg: str):
             await interaction.response.send_message(f"{arg} is not in the list")
 
     except Exception as e:
-        print("Error in /remove: ", e)
+        my_logger.error(f"Error in /remove: {e}")
         await interaction.response.send_message("❌ An error occurred while removing the user.", ephemeral=True)
 
     finally:
@@ -426,7 +360,7 @@ async def list(interaction: discord.interactions):
             user_list = "\n".join(user[0] for user in users)
             await interaction.response.send_message(f"**Users in this server ({users_count[0]}):**\n{user_list}")
     except Exception as e:
-        print("Error printing list in ", e)
+        my_logger.error(f"Error printing list in: {e}")
         await interaction.response.send_message("❌ An error occurred while retrieving user list.", ephemeral=True)
 
     finally:
@@ -463,7 +397,7 @@ async def set_channel(interaction: discord.interactions, arg: TextChannel):
                 await interaction.response.send_message(f"{arg} is already set as the default channel.")
         
     except Exception as e:
-        print("Error setting channel in ", guild_id, e)
+        my_logger.error(f"Error setting channel in {guild_id}: {e}")
         await interaction.response.send_message(f"❌ Failed to set {arg} as default channel.")
     
     finally:
@@ -494,7 +428,7 @@ async def update_channel(interaction: discord.interactions, arg: TextChannel):
             await interaction.response.send_message(f"No channel is set currently. Use `/setchannel` first.", ephemeral=True)
 
     except Exception as e:
-        print("Error updating channel in ", guild_id, e)
+        my_logger.error(f"Error updating channel in {guild_id}: {e}")
         await interaction.response.send_message(f"❌ Failed to update default channel to {arg}.")
 
     finally:
@@ -536,52 +470,33 @@ async def favorite_films(interaction: discord.interactions, arg: str):
         await interaction.response.send_message(embed=embed)
 
     except Exception as e:
-        print("Error in /favorites: ", e)
+        my_logger.error(f"Error in /favorites: {e}")
         await interaction.response.send_message("Failed to find users favorite films. Check spelling or try again later.", ephemeral=True)
 
 
 ### WORK IN PROGRESS ### Might not be possible
-@bot.tree.command(name="watchlistpick", description="Pick random film from watchlist")
-@app_commands.describe(arg="Username: ")
-async def watchlist_pick(interaction: discord.interactions, arg: str):
-    guild_id = interaction.guild.id
-    channel_id = interaction.channel.id
+# @bot.tree.command(name="watchlistpick", description="Pick random film from watchlist")
+# @app_commands.describe(arg="Username: ")
+# async def watchlist_pick(interaction: discord.interactions, arg: str):
+#     guild_id = interaction.guild.id
+#     channel_id = interaction.channel.id
 
-    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
-    if channel_check == "no_exist":
-        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
-        return
-    elif channel_check == "no_match":
-        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
-        return
+#     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+#     if channel_check == "no_exist":
+#         await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+#         return
+#     elif channel_check == "no_match":
+#         await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+#         return
     
-    #results = await asyncio.to_thread(watchlistScrape, arg)
+#     #results = await asyncio.to_thread(watchlistScrape, arg)
 
-    await interaction.response.send_message("This command is currently a work in progress")
+#     await interaction.response.send_message("This command is currently a work in progress")
 
-def update_last_entry(server_id, profile_name, film_title):
-    conn = None
-    cur = None
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """UPDATE diary_users
-            SET last_entry = %s, updated_at = now()
-            WHERE profile_name = %s AND server_id = %s""",
-            (film_title, profile_name, server_id)
-        )
-        conn.commit()
-    except psycopg2.Error as e:
-        print("Error in diary loop update query: ", e)
-        conn.rollback()
-    finally:
-        if cur: cur.close()
-        if conn: conn.close()
 
 @tasks.loop(minutes=30)
 async def diary_loop():
-    print("Task loop has began: ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    my_logger.info("Task loop has began.")
 
     try:
         conn = get_db_connection()
@@ -610,21 +525,21 @@ async def diary_loop():
                             await channel.send(embed=message)
                             await asyncio.sleep(0.5)
             except discord.NotFound:
-                print(f"Channel {channel_id} not found.")
+                my_logger.warning(f"Channel {channel_id} not found.")
             except discord.Forbidden:
-                print(f"Missing permissions to send in channel {channel_id} of server {server_id}")
+                my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
             except Exception as e:
-                print(f"Error sending message to {channel_id}: {e}")
+                my_logger.error(f"Error sending message to {channel_id}: {e}")
 
     except Exception as e:
-        print(f"Scheduled task failed: {e}")
+        my_logger.error(f"Scheduled task failed: {e}")
 
-    print("Task loop has finished: ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    my_logger.info("Task loop has finished.")
 
 
 @diary_loop.before_loop
 async def before_diary_loop():
-    print("Waiting until bot is ready for task startup")
+    my_logger.info("Waiting until bot is ready for task startup")
     await bot.wait_until_ready()
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
