@@ -15,4 +15,4 @@ discord.log
 .vscode
 *.sql
 *.txt
-logging.log
+*.log
