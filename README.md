@@ -4,7 +4,8 @@ This Discord bot brings Letterboxd diary activity directly to your server. It au
 
 ## Bot Invite Link
 
-### Placeholder
+### Status: Online
+### [Letterbotd](https://discord.com/channels/1398870551778295869/1398870552395120752/1401423217633136821)
 
 ## Bot Purpose
 
@@ -90,6 +91,7 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 - Dockerfile was initialized, but never finished.
 
 ---
+
 
 
 
