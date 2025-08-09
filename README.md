@@ -92,6 +92,14 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 
 ---
 
+## Legal
+
+- [Terms of Service](TERMS_OF_SERVICE.md)
+- [Privacy Policy](PRIVACY_POLICY.md)
+
+---
+
+
 
 
 
