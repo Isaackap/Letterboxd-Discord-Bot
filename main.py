@@ -23,7 +23,7 @@ def get_db_connection():
         port='5432' #Change 5433 testing
     )
 
-
+# Logger setup for all custom code logging
 my_logger = logging.getLogger("mybot")
 my_logger.setLevel(logging.DEBUG)
 
@@ -34,7 +34,7 @@ handler.setFormatter(formatter)
 my_logger.addHandler(handler)
 my_logger.propagate = False
 
-
+# Logger setup for only discord api logging
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
 intents.message_content = True
@@ -49,7 +49,7 @@ async def on_ready():
     conn = None
     cur = None
 
-    try:
+    try:        # Checks if servers are registered in the database, incase on_guild_join() failed to initialize 
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT server_id FROM discord_servers")
@@ -84,6 +84,8 @@ async def on_ready():
         if conn: conn.close()
 
 
+# Initialize server info into database when joining a new server
+# Can fail if the bot joins a server while offline, on_ready() is used as a backup in this scenario
 @bot.event
 async def on_guild_join(guild):
     guild_id = guild.id
@@ -107,6 +109,7 @@ async def on_guild_join(guild):
         if conn: conn.close()
 
 
+# Deletes server info in database with cascading to other data tables when removed from a server
 @bot.event
 async def on_guild_remove(guild):
     guild_id = guild.id
@@ -184,7 +187,9 @@ async def help_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-
+# Perfroms multiple checks when adding a user to the bot's list
+# Confirms the entered username is a valid Letterboxd profile and the profile exists
+# If exist, stores it into the database, and sends the profile's most recent entry in chat
 @bot.tree.command(name="add", description="Add a user")
 @app_commands.describe(arg = "Username:")
 async def add(interaction: discord.Interaction, arg: str):
@@ -215,7 +220,7 @@ async def add(interaction: discord.Interaction, arg: str):
         cur.execute(get_query, (guild_id,))
         
         users_count = cur.fetchone()
-        if users_count[0] >= 50:
+        if users_count[0] >= 10:        # Set as 10 users per server can be stored at a time
             cur.close()
             conn.close()
             await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit (10). First remove a user with `/remove`")
@@ -269,7 +274,7 @@ async def add(interaction: discord.Interaction, arg: str):
         if cur: cur.close()
         if conn: conn.close()
 
-
+# Remove a user from the list/database if it exist
 @bot.tree.command(name="remove", description="Remove a user")
 @app_commands.describe(arg="Username: ")
 async def remove(interaction: discord.interactions, arg: str):
@@ -322,7 +327,7 @@ async def remove(interaction: discord.interactions, arg: str):
         if cur: cur.close()
         if conn: conn.close()
 
-
+# Prints all users in the database for that server to the channel chat
 @bot.tree.command(name="list", description="List all users")
 @app_commands.describe()
 async def list(interaction: discord.interactions):
@@ -367,7 +372,8 @@ async def list(interaction: discord.interactions):
         if cur: cur.close()
         if conn: conn.close()
 
-
+# Set the default channel for the bot's commands in the server
+# Stores channel id in the database
 @bot.tree.command(name="setchannel", description="Set the default channel (Text)")
 @app_commands.describe(arg="Channel name")
 async def set_channel(interaction: discord.interactions, arg: TextChannel):
@@ -404,7 +410,7 @@ async def set_channel(interaction: discord.interactions, arg: TextChannel):
         if cur: cur.close()
         if conn: conn.close()
 
-
+# Updates the stored channel to a different one
 @bot.tree.command(name="updatechannel", description="Change the default channel (Text)")
 @app_commands.describe(arg="Channel name")
 async def update_channel(interaction: discord.interactions, arg: TextChannel):
@@ -435,7 +441,7 @@ async def update_channel(interaction: discord.interactions, arg: TextChannel):
         if cur: cur.close()
         if conn: conn.close()
 
-
+# Grabs the users' favorite films setup on their profile page
 @bot.tree.command(name="favorites", description="Grab users favorite films")
 @app_commands.describe(arg="Username: ")
 async def favorite_films(interaction: discord.interactions, arg: str):
@@ -493,7 +499,11 @@ async def favorite_films(interaction: discord.interactions, arg: str):
 
 #     await interaction.response.send_message("This command is currently a work in progress")
 
-
+# Task loop set to perform every set interval
+# Grabs all users in the database and loops through each one to scrape their diary info
+# Scraping function is setup to scrape the 5 most recent entries, but will stop early if the stored 'last_entry'
+# is reached in the diary, so it will only return new entries compared to the 'last_entry'
+# Then will call update_last_entry() to update the 'last_entry' with the new title
 @tasks.loop(minutes=30)
 async def diary_loop():
     my_logger.info("Task loop has began.")

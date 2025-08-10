@@ -18,6 +18,8 @@ def filmTitle(data, last_entry):
             return title_name.string
     return False
 
+# Only grabs the image placeholder url, before Javascript can fill in the actual link
+# Not currently called anywhere
 def filmImage(data):
     img_tag = data.find("img")
     my_logger.debug(img_tag["src"])
@@ -43,7 +45,8 @@ def filmReview(data):
         full_url = f"https://letterboxd.com{partial_url["href"]}"
         return full_url
     
-
+# Was mostly used to test the scraping before the bot was created
+# Currently not called anywhere
 def scrapeSite(profile):
     url = f"https://letterboxd.com/{profile}/films/diary/"
     try:
@@ -101,6 +104,8 @@ def firstScrape(profile):
         my_logger.error(f"Error retrieving {profile} info: {e}")
         return False
     
+# Scraping performed during the diary task loop
+# Configured to only scrape the 5 most recent entries so to not spam a channel's chat if there are more to grab
 def diaryScrape(profile, entry):
     url = f"https://letterboxd.com/{profile}/films/diary/"
     film_title = []
@@ -149,7 +154,7 @@ def diaryScrape(profile, entry):
         my_logger.error(f"Error retrieving {profile} info: {e}")
         return False
 
-    
+# Scraping for users' favorite films listed on profile
 def favoriteFilmsScrape(profile):
     url = f"https://letterboxd.com/{profile}/"
     titles = []
@@ -184,7 +189,9 @@ def favoriteFilmsScrape(profile):
 
     return titles
 
-    
+# Scrapes a users' entire watchlist
+# Should scrape all their pages if they have multiple
+# Not currently working, and not called anywhere
 def watchlistScrape(profile):
     base_url = f"https://letterboxd.com/{profile}/watchlist"
     page = 1
