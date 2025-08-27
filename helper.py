@@ -31,7 +31,7 @@ project_id = "discord-bit-468008"
 db_password = access_secret(project_id, "BotDatabasePassword")
 
 
-def build_embed_message(data):
+def build_embed_message(data, profile_url):
     _, film_title, film_release, film_rating, film_review = data
     embed_list = []
 

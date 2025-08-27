@@ -13,6 +13,8 @@ project_id = "discord-bit-468008"
 token = access_secret(project_id, "BotToken")   
 db_password = access_secret(project_id, "BotDatabasePassword")
 
+MAX_USER_COUNT_PER_SERVER = 50
+TASK_LOOP_INTERVAL = 30
 
 def get_db_connection():
     return psycopg2.connect(
@@ -73,8 +75,8 @@ async def on_ready():
 
         synced = await bot.tree.sync()
         my_logger.info(f"Synced {len(synced)} command(s)")
-        if not diary_loop.is_running():
-            diary_loop.start()
+        # if not diary_loop.is_running():
+        #     diary_loop.start()
     
     except Exception as e:
         my_logger.error(f"Error in on_ready event: {e}")
@@ -198,6 +200,7 @@ async def add(interaction: discord.Interaction, arg: str):
     conn = None
     cur = None
     profile_name = arg.lower()
+    profile_url = f"https://letterboxd.com/{profile_name}/"
     
     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
     if channel_check == "no_exist":
@@ -220,16 +223,16 @@ async def add(interaction: discord.Interaction, arg: str):
         cur.execute(get_query, (guild_id,))
         
         users_count = cur.fetchone()
-        if users_count[0] >= 10:        # Set as 10 users per server can be stored at a time
+        if users_count[0] >= MAX_USER_COUNT_PER_SERVER:
             cur.close()
             conn.close()
             await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit (10). First remove a user with `/remove`")
             return
         
-        insert_query = """INSERT INTO diary_users (profile_name, server_id, updated_at)
-        VALUES (%s, %s, now())
+        insert_query = """INSERT INTO diary_users (profile_name, server_id, updated_at, profile_url)
+        VALUES (%s, %s, now(), %s)
         ON CONFLICT (profile_name, server_id) DO NOTHING;"""
-        cur.execute(insert_query, (profile_name, guild_id))
+        cur.execute(insert_query, (profile_name, guild_id, profile_url))
 
         if cur.rowcount > 0:    # Checks if the insert_query execute before updating
             result = firstScrape(profile_name)
@@ -241,7 +244,7 @@ async def add(interaction: discord.Interaction, arg: str):
                 return
             else:
                 if result[0] is True:
-                    embed, film_title = build_embed_message(result)
+                    embed, film_title = build_embed_message(result, profile_url)
                 else:
                     film_title = result
             try:
@@ -348,7 +351,7 @@ async def list(interaction: discord.interactions):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        get_query = """SELECT profile_name
+        get_query = """SELECT profile_name, profile_url
         FROM diary_users
         WHERE server_id = %s"""
         cur.execute(get_query, (guild_id,))
@@ -362,8 +365,18 @@ async def list(interaction: discord.interactions):
         if not users:
             await interaction.response.send_message("No users have been added yet. Use `/add` to add users.")
         else:
-            user_list = "\n".join(user[0] for user in users)
-            await interaction.response.send_message(f"**Users in this server ({users_count[0]}):**\n{user_list}")
+            user_list = []
+            for user in users:
+                user_list.append(f"• [{user[0]}](<{user[1]}>)")
+            join_user_list = "\n".join(user_list)
+
+            embed = Embed(
+            title=f"Users In This Server ({users_count[0]}/{MAX_USER_COUNT_PER_SERVER})",
+            description=join_user_list,
+            color=0x1DB954
+            )
+        
+            await interaction.response.send_message(embed = embed)
     except Exception as e:
         my_logger.error(f"Error printing list in: {e}")
         await interaction.response.send_message("❌ An error occurred while retrieving user list.", ephemeral=True)
@@ -504,7 +517,7 @@ async def favorite_films(interaction: discord.interactions, arg: str):
 # Scraping function is setup to scrape the 5 most recent entries, but will stop early if the stored 'last_entry'
 # is reached in the diary, so it will only return new entries compared to the 'last_entry'
 # Then will call update_last_entry() to update the 'last_entry' with the new title
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=TASK_LOOP_INTERVAL)
 async def diary_loop():
     my_logger.info("Task loop has began.")
 
