@@ -32,7 +32,7 @@ db_password = access_secret(project_id, "BotDatabasePassword")
 
 
 def build_embed_message(data, profile_url):
-    _, film_title, film_release, film_rating, film_review, diary_url = data
+    _, film_title, film_release, film_rating, film_review, diary_url, film_rewatch = data
     embed_list = []
 
     if isinstance(film_title, str):
@@ -41,6 +41,7 @@ def build_embed_message(data, profile_url):
         film_rating = [film_rating]
         film_review = [film_review]
         diary_url = [diary_url]
+        film_rewatch = [film_rewatch]
 
     latest_entry = film_title[0]
 
@@ -50,8 +51,11 @@ def build_embed_message(data, profile_url):
         rating = film_rating[i]
         review = film_review[i]
         diary_url = diary_url[i]
+        film_rewatch = film_rewatch[i]
 
-        if rating:
+        if rating == '0':
+            rating_embeded = "*No rating provided.*"
+        else:
             try:
                 float_rating = float(rating) / 2
                 stars = int(float_rating)
@@ -64,8 +68,6 @@ def build_embed_message(data, profile_url):
                 rating_embeded = f"Rating: {string_rating}"
             except ValueError:
                 rating_embeded = "*Invalid rating format.*"
-        else:
-            rating_embeded = "*No rating provided.*"
 
         embed = Embed(
             title=f"{title} ({release})",

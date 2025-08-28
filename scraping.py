@@ -51,6 +51,11 @@ def diaryURL(data):
         full_url = f"https://letterboxd.com{partial_url["href"]}"
         return full_url
     return False
+
+def filmRewatch(data):
+    if "icon-status-off" in data.get("class", []):
+        return False
+    return True
     
 
 # Initial scrape when a new user is added
@@ -77,8 +82,9 @@ def firstScrape(profile):
             film_rating = filmRating(rating)
             film_review = filmReview(review)
             diary_url = diaryURL(details)
+            film_rewatch = filmRewatch(rewatch)
             #filmImage(details)
-            return True, film_title, film_release, film_rating, film_review, diary_url
+            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch
         else:
             return "no_entry"
     except Exception as e:
@@ -94,6 +100,7 @@ def diaryScrape(profile, entry):
     film_rating = []
     film_review = []
     diary_url = []
+    film_rewatch = []
     #sleep(5.0) 
 
     try:
@@ -127,9 +134,10 @@ def diaryScrape(profile, entry):
                 film_rating.append(filmRating(rating))
                 film_review.append(filmReview(review))
                 diary_url.append(diaryURL(details))
+                film_rewatch.append(filmRewatch(rewatch))
                 #filmImage(details)
                 
-            return True, film_title, film_release, film_rating, film_review, diary_url
+            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch
         else:
             return False
         
@@ -227,10 +235,11 @@ def watchlistScrape(profile):
 
 
 # if __name__ == "__main__":
-    #list = watchlistScrape("isaackap")
-    
+    # list = watchlistScrape("isaackap")
+    # list = firstScrape("alfieg97")
     # list = favoriteFilmsScrape("isaackap")
     # print(list)
+
 
 
 # Was mostly used to test the scraping before the bot was created
