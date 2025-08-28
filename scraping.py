@@ -168,7 +168,7 @@ def favoriteFilmsScrape(profile):
             return "No favorites"
         else:
             if ulist:
-                list_items = ulist.find_all("li", class_="poster-container favourite-film-poster-container")
+                list_items = ulist.find_all("li", class_="posteritem favourite-film-poster-container")
                 for item in list_items:
                     img = item.find("img")
                     title = img["alt"]
