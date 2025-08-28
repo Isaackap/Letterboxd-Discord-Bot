@@ -94,8 +94,8 @@ async def on_ready():
 
         synced = await bot.tree.sync()
         my_logger.info(f"Synced {len(synced)} command(s)")
-        # if not diary_loop.is_running():
-        #     diary_loop.start()
+        if not diary_loop.is_running():
+            diary_loop.start()
     
     except Exception as e:
         my_logger.error(f"Error in on_ready event: {e}")

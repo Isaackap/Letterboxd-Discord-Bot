@@ -45,33 +45,13 @@ def filmReview(data):
         full_url = f"https://letterboxd.com{partial_url["href"]}"
         return full_url
     
-# Was mostly used to test the scraping before the bot was created
-# Currently not called anywhere
-def scrapeSite(profile):
-    url = f"https://letterboxd.com/{profile}/films/diary/"
-    try:
-        result = requests.get(url, headers=headers)
-        doc = BeautifulSoup(result.text, "html.parser")
-        # with open("index.html", "w") as file:
-            # file.write(result.text)
-        # with open("index.html", "r") as file:
-        #     doc = BeautifulSoup(file, "html.parser")
-        user = doc.find(["title"])
-        my_logger.debug((user.string.split("’")[0]).strip())
-    except Exception as e:
-        my_logger.error(f"Error in scrapeSite: {e}")
-        return -1
+def diaryURL(data):
+    partial_url = data.find("a")
+    if partial_url:
+        full_url = f"https://letterboxd.com{partial_url["href"]}"
+        return full_url
+    return False
     
-    tbody = doc.tbody
-    trs = tbody.find_all("tr")
-    for tr in trs:
-        date, details, released, rating, like, rewatch, review = tr.find_all("td")[1:8]
-        filmTitle(details)
-        filmRelease(released)
-        filmRating(rating)
-        filmReview(review)
-        filmImage(details)
-        print()
 
 # Initial scrape when a new user is added
 # Also is used as a verification if the added username exist on Letterboxd
@@ -96,8 +76,9 @@ def firstScrape(profile):
             film_release = filmRelease(released)
             film_rating = filmRating(rating)
             film_review = filmReview(review)
+            diary_url = diaryURL(details)
             #filmImage(details)
-            return True, film_title, film_release, film_rating, film_review
+            return True, film_title, film_release, film_rating, film_review, diary_url
         else:
             return "no_entry"
     except Exception as e:
@@ -112,6 +93,7 @@ def diaryScrape(profile, entry):
     film_release = []
     film_rating = []
     film_review = []
+    diary_url = []
     #sleep(5.0) 
 
     try:
@@ -144,9 +126,10 @@ def diaryScrape(profile, entry):
                 film_release.append(filmRelease(released))
                 film_rating.append(filmRating(rating))
                 film_review.append(filmReview(review))
+                diary_url.append(diaryURL(details))
                 #filmImage(details)
                 
-            return True, film_title, film_release, film_rating, film_review
+            return True, film_title, film_release, film_rating, film_review, diary_url
         else:
             return False
         
@@ -242,8 +225,38 @@ def watchlistScrape(profile):
 
     return titles
 
+
 # if __name__ == "__main__":
-#     #list = watchlistScrape("isaackap")
+    #list = watchlistScrape("isaackap")
     
-#     list = favoriteFilmsScrape("isaackap")
-#     print(list)
+    # list = favoriteFilmsScrape("isaackap")
+    # print(list)
+
+
+# Was mostly used to test the scraping before the bot was created
+# Currently not called anywhere
+def scrapeSite(profile):
+    url = f"https://letterboxd.com/{profile}/films/diary/"
+    try:
+        result = requests.get(url, headers=headers)
+        doc = BeautifulSoup(result.text, "html.parser")
+        # with open("index.html", "w") as file:
+            # file.write(result.text)
+        # with open("index.html", "r") as file:
+        #     doc = BeautifulSoup(file, "html.parser")
+        user = doc.find(["title"])
+        my_logger.debug((user.string.split("’")[0]).strip())
+    except Exception as e:
+        my_logger.error(f"Error in scrapeSite: {e}")
+        return -1
+    
+    tbody = doc.tbody
+    trs = tbody.find_all("tr")
+    for tr in trs:
+        date, details, released, rating, like, rewatch, review = tr.find_all("td")[1:8]
+        filmTitle(details)
+        filmRelease(released)
+        filmRating(rating)
+        filmReview(review)
+        filmImage(details)
+        print()

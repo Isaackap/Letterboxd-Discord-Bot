@@ -32,7 +32,7 @@ db_password = access_secret(project_id, "BotDatabasePassword")
 
 
 def build_embed_message(data, profile_url):
-    _, film_title, film_release, film_rating, film_review = data
+    _, film_title, film_release, film_rating, film_review, diary_url = data
     embed_list = []
 
     if isinstance(film_title, str):
@@ -40,6 +40,7 @@ def build_embed_message(data, profile_url):
         film_release = [film_release]
         film_rating = [film_rating]
         film_review = [film_review]
+        diary_url = [diary_url]
 
     latest_entry = film_title[0]
 
@@ -48,6 +49,7 @@ def build_embed_message(data, profile_url):
         release = film_release[i]
         rating = film_rating[i]
         review = film_review[i]
+        diary_url = diary_url[i]
 
         if rating:
             try:
@@ -68,14 +70,16 @@ def build_embed_message(data, profile_url):
         embed = Embed(
             title=f"{title} ({release})",
             description=rating_embeded,
+            url=diary_url,
             color=0x1DB954
         )
 
-        embed.add_field(
-            name="Review",
-            value=review if review else "*No review provided.*",
-            inline=False
-        )
+        if review:
+            embed.add_field(
+                name="Review",
+                value=review,
+                inline=False
+            )
         
         embed_list.append(embed)
     return embed_list, latest_entry
