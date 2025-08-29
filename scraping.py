@@ -107,12 +107,12 @@ def diaryScrape(profile, entry):
         result = requests.get(url, headers=headers)
         if result.status_code != 200:
                 my_logger.error(f"Failed to fetch page (status {result.status_code})")
-                return False
+                return False, None
         doc = BeautifulSoup(result.text, "html.parser")
         user = doc.find(["title"])
         if not user or "not found" in user.text.lower():
             my_logger.info(f"Invalid or non-existent user: {profile}")
-            return False
+            return False, None
         
         tbody = doc.tbody
         first = True
@@ -124,7 +124,7 @@ def diaryScrape(profile, entry):
                 if not title:
                     if first:
                         #print("No new entries", profile)
-                        return False
+                        return False, None
                     else:
                         break
                 first = False
@@ -139,11 +139,11 @@ def diaryScrape(profile, entry):
                 
             return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch
         else:
-            return False
+            return False, None
         
     except Exception as e:
         my_logger.error(f"Error retrieving {profile} info: {e}")
-        return False
+        return False, None
 
 # Scraping for users' favorite films listed on profile
 def favoriteFilmsScrape(profile):

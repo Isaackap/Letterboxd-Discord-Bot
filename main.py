@@ -1,4 +1,4 @@
-import discord, os, logging, psycopg2, asyncio, logging
+import discord, os, logging, psycopg2, asyncio, logging, requests
 from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
@@ -8,10 +8,12 @@ from helper import build_embed_message, update_last_entry, check_channel, access
 # load_dotenv()
 # token = os.getenv("DISCORD_TOKEN_TEST")
 # db_password = os.getenv("DB_PASSWORD")
+# api_key = os.getenv("OMDb_API_KEY")
 
 project_id = "discord-bit-468008"
 token = access_secret(project_id, "BotToken")   
 db_password = access_secret(project_id, "BotDatabasePassword")
+api_key = access_secret(project_id, "OMDb_API_KEY")
 
 MAX_USER_COUNT_PER_SERVER = 50
 TASK_LOOP_INTERVAL = 30
@@ -77,20 +79,20 @@ async def on_ready():
         # I had added the 'profile_url' column to the database.
         # Any users added after this change will be added correctly in the /add command section
         # This should only need to be ran once after implementation, will possibly delete/comment out after that.
-        cur.execute("SELECT profile_name FROM diary_users")
-        results = cur.fetchall()
-        for result in results: 
-            user = result[0] 
-            profile_url = (f"https://letterboxd.com/{user}/")
-            try:
-                update_query = """UPDATE diary_users 
-                                SET updated_at = now(), profile_url = %s
-                                WHERE profile_name = %s"""
-                cur.execute(update_query, (profile_url, user))
-            except psycopg2.Error as e:
-                my_logger.error(f"Failed to insert profile_url for {user}: {e}")
-            else:
-                conn.commit()
+        # cur.execute("SELECT profile_name FROM diary_users")
+        # results = cur.fetchall()
+        # for result in results: 
+        #     user = result[0] 
+        #     profile_url = (f"https://letterboxd.com/{user}/")
+        #     try:
+        #         update_query = """UPDATE diary_users 
+        #                         SET updated_at = now(), profile_url = %s
+        #                         WHERE profile_name = %s"""
+        #         cur.execute(update_query, (profile_url, user))
+        #     except psycopg2.Error as e:
+        #         my_logger.error(f"Failed to insert profile_url for {user}: {e}")
+        #     else:
+        #         conn.commit()
 
         synced = await bot.tree.sync()
         my_logger.info(f"Synced {len(synced)} command(s)")
@@ -512,6 +514,60 @@ async def favorite_films(interaction: discord.interactions, arg: str):
         await interaction.response.send_message("Failed to find users favorite films. Check spelling or try again later.", ephemeral=True)
 
 
+@bot.tree.command(name="film", description="Get a film's info")
+@app_commands.describe(arg="FilmName: ")
+async def film_search(interaction: discord.interactions, arg: str):
+    url = f"http://www.omdbapi.com/?apikey={api_key}&"
+    headers = {
+        "X-API-Key": api_key,
+        "Accept": "applications/json"
+    }
+    params = {
+        "t": arg
+    }
+
+    # Currently not restricing this command to the set channel
+    # since I would like to be able to use this command anywhere.
+    # May change later
+    # guild_id = interaction.guild.id
+    # channel_id = interaction.channel.id
+
+    # channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    # if channel_check == "no_exist":
+    #     await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+    #     return
+    # elif channel_check == "no_match":
+    #     await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+    #     return
+
+    try:
+        result = requests.get(url, headers=headers, params=params)
+        #print(response.json())
+        response = result.json()
+
+        embed = Embed(
+            title=f"{response["Title"]} ({response["Year"]})",
+            description=response["Plot"],
+            color=0x1DB954
+        )
+
+        embed.set_thumbnail(url=response["Poster"])
+
+        embed.add_field(name="Runtime", value=response["Runtime"], inline=True)
+        embed.add_field(name="Genre", value=response["Genre"], inline=True)
+        embed.add_field(name="Rated", value=response["Rated"], inline=True)
+        embed.add_field(name="Director", value=response["Director"], inline=True)
+        embed.add_field(name="Main Cast", value=response["Actors"], inline=True)
+
+        embed.set_footer(text=f"IMDb Rating: {response['imdbRating']}")
+        
+        await interaction.response.send_message(embed=embed)
+
+    except Exception as e:
+        my_logger.error(f"Error in /film: {e}")
+        await interaction.response.send_message("Failed to find film data. Check spelling or try again later.", ephemeral=True)
+
+
 ### WORK IN PROGRESS ### Might not be possible
 # @bot.tree.command(name="watchlistpick", description="Pick random film from watchlist")
 # @app_commands.describe(arg="Username: ")
@@ -556,7 +612,7 @@ async def diary_loop():
                 channel = await bot.fetch_channel(channel_id)
                 if isinstance(channel, discord.TextChannel):
                     result = await asyncio.to_thread(diaryScrape, profile_name, last_entry)
-                    if not result or result[0] is False:
+                    if not result[0]:
                         continue
                     else:
                         embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url)
