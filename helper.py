@@ -31,9 +31,11 @@ project_id = "discord-bit-468008"
 db_password = access_secret(project_id, "BotDatabasePassword")
 
 
-def build_embed_message(data, profile_url):
+def build_embed_message(data, profile_url, profile_name):
     _, film_title, film_release, film_rating, film_review, diary_url, film_rewatch = data
     embed_list = []
+    profile_url = profile_url
+    profile_name = profile_name
 
     if isinstance(film_title, str):
         film_title = [film_title]
@@ -65,16 +67,28 @@ def build_embed_message(data, profile_url):
                 if half_star:
                     string_rating += "<:79899letterboxdhalfstar:1400770001237184575>"
 
-                rating_embeded = f"Rating: {string_rating}"
+                rating_embeded = string_rating
             except ValueError:
                 rating_embeded = "*Invalid rating format.*"
 
+
         embed = Embed(
-            title=f"{title} ({release})",
-            description=rating_embeded,
-            url=diary_url,
-            color=0x1DB954
-        )
+                title=f"{title} ({release})",
+                description=rating_embeded,
+                url=diary_url,
+                color=0x1DB954
+            )
+        
+        if not film_rewatch:
+            embed.set_author(
+                name=f"{profile_name} Watched 🎦",
+                url=profile_url
+            )
+        else:
+            embed.set_author(
+                name=f"{profile_name} Rewatched 🔁",
+                url=profile_url
+            )
 
         if review:
             embed.add_field(

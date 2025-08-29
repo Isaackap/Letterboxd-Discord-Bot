@@ -265,7 +265,7 @@ async def add(interaction: discord.Interaction, arg: str):
                 return
             else:
                 if result[0] is True:
-                    embed, film_title = build_embed_message(result, profile_url)
+                    embed, film_title = build_embed_message(result, profile_url, profile_name)
                 else:
                     film_title = result
             try:
@@ -615,7 +615,7 @@ async def diary_loop():
                     if not result[0]:
                         continue
                     else:
-                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url)
+                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name)
                         await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
 
                         await channel.send(f"{profile_name}'s New Diary Entries:")
