@@ -200,6 +200,12 @@ async def help_command(interaction: discord.Interaction):
     )
 
     embed.add_field(
+        name="`/film <filmname>`",
+        value="Post a film's data. Film name must be spelt correctly, include accents but not special characters.",
+        inline=False
+    )
+
+    embed.add_field(
         name="`/help`",
         value="Display this help message.",
         inline=False
