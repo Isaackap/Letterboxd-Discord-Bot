@@ -44,7 +44,7 @@ Changes the default channel where the bot will send updates. Only one channel pe
 
 ### `/add <profile_name>`
 
-Adds a Letterboxd user to the tracking list for the server. Up to 10 users can be tracked per server.
+Adds a Letterboxd user to the tracking list for the server. Up to 50 users can be tracked per server.
 
 ### `/remove <profile_name>`
 
@@ -57,6 +57,10 @@ Displays the list of currently tracked Letterboxd users in the server.
 ### `/favorites <profile_name>`
 
 Post the Letterboxd users' favorite films listed on their profile page.
+
+### '/film <film_name>
+
+Post a film's general info such as title, release year, director, rating, runtime, etc.
 
 ### `/help`
 
@@ -107,3 +111,5 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 - [Privacy Policy](PRIVACY_POLICY.md)
 
 ---
+
+
