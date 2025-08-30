@@ -2,18 +2,18 @@ import discord, os, logging, psycopg2, asyncio, logging, requests
 from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from dotenv import load_dotenv
-from scraping import firstScrape, diaryScrape, favoriteFilmsScrape
+from scraping import firstScrape, diaryScrape, favoriteFilmsScrape, profileImageOnReady
 from helper import build_embed_message, update_last_entry, check_channel, access_secret
 
-# load_dotenv()
-# token = os.getenv("DISCORD_TOKEN_TEST")
-# db_password = os.getenv("DB_PASSWORD")
-# api_key = os.getenv("OMDb_API_KEY")
+load_dotenv()
+token = os.getenv("DISCORD_TOKEN_TEST")
+db_password = os.getenv("DB_PASSWORD")
+api_key = os.getenv("OMDb_API_KEY")
 
-project_id = "discord-bit-468008"
-token = access_secret(project_id, "BotToken")   
-db_password = access_secret(project_id, "BotDatabasePassword")
-api_key = access_secret(project_id, "OMDb_API_KEY")
+# project_id = "discord-bit-468008"
+# token = access_secret(project_id, "BotToken")   
+# db_password = access_secret(project_id, "BotDatabasePassword")
+# api_key = access_secret(project_id, "OMDb_API_KEY")
 
 MAX_USER_COUNT_PER_SERVER = 50
 TASK_LOOP_INTERVAL = 30
@@ -24,7 +24,7 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5432' #Change 5433 testing
+        port='5433' #Change 5433 testing
     )
 
 # Logger setup for all custom code logging
@@ -93,6 +93,28 @@ async def on_ready():
         #         my_logger.error(f"Failed to insert profile_url for {user}: {e}")
         #     else:
         #         conn.commit()
+
+        # This section is to add profile images to the database for users that were added before
+        # I had added the 'profile_image' column to the database.
+        # Any users added after this change will be added correctly in the /add command section
+        # This should only need to be ran once after implementation, will possibly delete/comment out after that.
+        # cur.execute("SELECT profile_name FROM diary_users")
+        # results = cur.fetchall()
+        # for result in results: 
+        #     user = result[0] 
+        #     profile_image = profileImageOnReady(user)
+        #     if profile_image:
+        #         try:
+        #             update_query = """UPDATE diary_users 
+        #                             SET updated_at = now(), profile_image = %s
+        #                             WHERE profile_name = %s"""
+        #             cur.execute(update_query, (profile_image, user))
+        #         except psycopg2.Error as e:
+        #             my_logger.error(f"Failed to insert profile_image for {user}: {e}")
+        #         else:
+        #             conn.commit()
+        #     else:
+        #         my_logger.error(f"Failed to grab profile image for {user}")
 
         synced = await bot.tree.sync()
         my_logger.info(f"Synced {len(synced)} command(s)")
@@ -165,7 +187,7 @@ async def help_command(interaction: discord.Interaction):
 
     embed.add_field(
         name="`/add <username>`",
-        value="Add a Letterboxd profile to this server's diary list (max 10 users).",
+        value=f"Add a Letterboxd profile to this server's diary list (max {MAX_USER_COUNT_PER_SERVER} users).",
         inline=False
     )
 
@@ -253,7 +275,7 @@ async def add(interaction: discord.Interaction, arg: str):
         if users_count[0] >= MAX_USER_COUNT_PER_SERVER:
             cur.close()
             conn.close()
-            await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit (10). First remove a user with `/remove`")
+            await interaction.response.send_message(f"❌ Failed to add {profile_name} to list. List exceeds maximum limit ({MAX_USER_COUNT_PER_SERVER}). First remove a user with `/remove`")
             return
         
         insert_query = """INSERT INTO diary_users (profile_name, server_id, updated_at, profile_url)
@@ -271,7 +293,8 @@ async def add(interaction: discord.Interaction, arg: str):
                 return
             else:
                 if result[0] is True:
-                    embed, film_title = build_embed_message(result, profile_url, profile_name)
+                    profile_image = result[7]
+                    embed, film_title = build_embed_message(result, profile_url, profile_name, profile_image)
                 else:
                     film_title = result
             try:
@@ -280,9 +303,9 @@ async def add(interaction: discord.Interaction, arg: str):
                 WHERE server_id = %s;"""
                 cur.execute(server_update_query, (guild_id,))
                 user_update_query = """UPDATE diary_users
-                SET last_entry = %s, updated_at = now()
+                SET last_entry = %s, updated_at = now(), profile_image = %s
                 WHERE profile_name = %s AND server_id = %s"""
-                cur.execute(user_update_query, (film_title, profile_name, guild_id))
+                cur.execute(user_update_query, (film_title, profile_image, profile_name, guild_id))
             except psycopg2.Error as e:
                 my_logger.error(f"Error during /add transaction: {e}")
                 conn.rollback()
@@ -547,31 +570,41 @@ async def film_search(interaction: discord.interactions, arg: str):
     #     return
 
     try:
-        result = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params)
         #print(response.json())
-        response = result.json()
+        data = response.json()
 
-        embed = Embed(
-            title=f"{response["Title"]} ({response["Year"]})",
-            description=response["Plot"],
-            color=0x1DB954
-        )
+        if response.ok:
+            embed = Embed(
+                title=f"{data["Title"]} ({data["Year"]})",
+                description=data["Plot"],
+                color=0x1DB954
+            )
 
-        embed.set_thumbnail(url=response["Poster"])
+            embed.set_thumbnail(url=data["Poster"])
 
-        embed.add_field(name="Runtime", value=response["Runtime"], inline=True)
-        embed.add_field(name="Genre", value=response["Genre"], inline=True)
-        embed.add_field(name="Rated", value=response["Rated"], inline=True)
-        embed.add_field(name="Director", value=response["Director"], inline=True)
-        embed.add_field(name="Main Cast", value=response["Actors"], inline=True)
+            embed.add_field(name="Runtime", value=data["Runtime"], inline=True)
+            embed.add_field(name="Genre", value=data["Genre"], inline=True)
+            embed.add_field(name="Rated", value=data["Rated"], inline=True)
+            embed.add_field(name="Director", value=data["Director"], inline=True)
+            embed.add_field(name="Main Cast", value=data["Actors"], inline=True)
 
-        embed.set_footer(text=f"IMDb Rating: {response['imdbRating']}")
-        
-        await interaction.response.send_message(embed=embed)
+            embed.set_footer(text=f"IMDb Rating: {data['imdbRating']}")
+            
+            await interaction.response.send_message(embed=embed)
+        else:
+            my_logger.error(f"'/film' API call response returned false. Status Code: {response.status_code}")
+            try:
+                error_json = response.json()
+                my_logger.error(f"Error Message: {error_json.get("message", "No message provided.")}")
+            except ValueError:
+                my_logger.error(f"Raw Error: {response.text}")
+            finally:
+                await interaction.response.send_message("Failed to get film data. Check spelling or try again later.", ephemeral=True)
 
     except Exception as e:
         my_logger.error(f"Error in /film: {e}")
-        await interaction.response.send_message("Failed to find film data. Check spelling or try again later.", ephemeral=True)
+        await interaction.response.send_message("Failed to get film data. Check spelling or try again later.", ephemeral=True)
 
 
 ### WORK IN PROGRESS ### Might not be possible
@@ -605,14 +638,14 @@ async def diary_loop():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""SELECT sc.channel_id, sc.server_id, du.profile_name, du.last_entry, du.profile_url
+        cur.execute("""SELECT sc.channel_id, sc.server_id, du.profile_name, du.last_entry, du.profile_url, du.profile_image
                     FROM server_channels sc
                     JOIN diary_users du ON sc.server_id = du.server_id""")
         results = cur.fetchall()
         cur.close()
         conn.close()
 
-        for channel_id, server_id, profile_name, last_entry, profile_url in results:
+        for channel_id, server_id, profile_name, last_entry, profile_url, profile_image in results:
             await asyncio.sleep(1.0)
             try:
                 channel = await bot.fetch_channel(channel_id)
@@ -621,10 +654,10 @@ async def diary_loop():
                     if not result[0]:
                         continue
                     else:
-                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name)
+                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
                         await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
 
-                        await channel.send(f"{profile_name}'s New Diary Entries:")
+                        #await channel.send(f"{profile_name}'s New Diary Entries:")
                         for message in embed:
                             await channel.send(embed=message)
                             await asyncio.sleep(0.5)
@@ -633,7 +666,7 @@ async def diary_loop():
             except discord.Forbidden:
                 my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
             except Exception as e:
-                my_logger.error(f"Error sending message to {channel_id}: {e}")
+                my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
 
     except Exception as e:
         my_logger.error(f"Scheduled task failed: {e}")
