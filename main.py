@@ -98,23 +98,23 @@ async def on_ready():
         # I had added the 'profile_image' column to the database.
         # Any users added after this change will be added correctly in the /add command section
         # This should only need to be ran once after implementation, will possibly delete/comment out after that.
-        cur.execute("SELECT profile_name FROM diary_users")
-        results = cur.fetchall()
-        for result in results: 
-            user = result[0] 
-            profile_image = profileImageOnReady(user)
-            if profile_image:
-                try:
-                    update_query = """UPDATE diary_users 
-                                    SET updated_at = now(), profile_image = %s
-                                    WHERE profile_name = %s"""
-                    cur.execute(update_query, (profile_image, user))
-                except psycopg2.Error as e:
-                    my_logger.error(f"Failed to insert profile_image for {user}: {e}")
-                else:
-                    conn.commit()
-            else:
-                my_logger.error(f"Failed to grab profile image for {user}")
+        # cur.execute("SELECT profile_name FROM diary_users")
+        # results = cur.fetchall()
+        # for result in results: 
+        #     user = result[0] 
+        #     profile_image = profileImageOnReady(user)
+        #     if profile_image:
+        #         try:
+        #             update_query = """UPDATE diary_users 
+        #                             SET updated_at = now(), profile_image = %s
+        #                             WHERE profile_name = %s"""
+        #             cur.execute(update_query, (profile_image, user))
+        #         except psycopg2.Error as e:
+        #             my_logger.error(f"Failed to insert profile_image for {user}: {e}")
+        #         else:
+        #             conn.commit()
+        #     else:
+        #         my_logger.error(f"Failed to grab profile image for {user}")
 
         synced = await bot.tree.sync()
         my_logger.info(f"Synced {len(synced)} command(s)")
@@ -552,7 +552,8 @@ async def film_search(interaction: discord.interactions, arg: str):
         "Accept": "applications/json"
     }
     params = {
-        "t": arg
+        "t": arg,
+        "type": "movie"
     }
 
     # Currently not restricing this command to the set channel

@@ -1,5 +1,5 @@
 from discord import Embed
-import psycopg2, os, logging
+import psycopg2, os, logging, requests
 from dotenv import load_dotenv
 from google.cloud import secretmanager
 
@@ -7,6 +7,7 @@ my_logger = logging.getLogger("mybot")
 
 # load_dotenv()
 # db_password = os.getenv("DB_PASSWORD")
+# api_key = os.getenv("OMDb_API_KEY")
 
 def get_db_connection():
     return psycopg2.connect(
@@ -32,9 +33,16 @@ def access_secret(project_id: str, secret_id: str, version: str = "latest") -> s
 
 project_id = "discord-bit-468008"   
 db_password = access_secret(project_id, "BotDatabasePassword")
+api_key = access_secret(project_id, "OMDb_API_KEY")
 
 
 def build_embed_message(data, profile_url, profile_name, profile_image):
+    url = f"http://www.omdbapi.com/?apikey={api_key}&"
+    headers = {
+        "X-API-Key": api_key,
+        "Accept": "applications/json"
+    }
+    
     try:
         #my_logger.debug(data, profile_url, profile_name)
         _, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, throwaway_var = data
@@ -60,6 +68,32 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
             review = film_review[i]
             diary = diary_url[i]
             rewatch = film_rewatch[i]
+            
+            params = {
+                "t": title,
+                "y": release,
+                "type": "movie"
+            }
+
+            try:
+                response = requests.get(url, headers=headers, params=params)
+                #print(response.json())
+                data = response.json()
+
+                if response.ok:
+                    movie_poster = data["Poster"]
+                else:
+                    movie_poster = False
+                    my_logger.error(f"build_embed_message() API call response returned false. Status Code: {response.status_code}")
+                    try:
+                        error_json = response.json()
+                        my_logger.error(f"Error Message: {error_json.get("message", "No message provided.")}")
+                    except ValueError:
+                        my_logger.error(f"Raw Error: {response.text}")   
+
+            except Exception as e:
+                my_logger.error(f"Error in build_embed_message() API call: {e}")
+                movie_poster = False
 
             if rating == '0':
                 rating_embeded = "*No rating provided.*"
@@ -84,6 +118,9 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
                     url=diary,
                     color=0x1DB954
                 )
+            
+            if movie_poster:
+                embed.set_thumbnail(url=movie_poster)
             
             if not rewatch:
                 embed.set_author(
