@@ -5,8 +5,8 @@ from google.cloud import secretmanager
 
 my_logger = logging.getLogger("mybot")
 
-load_dotenv()
-db_password = os.getenv("DB_PASSWORD")
+# load_dotenv()
+# db_password = os.getenv("DB_PASSWORD")
 
 def get_db_connection():
     return psycopg2.connect(
@@ -14,7 +14,7 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5433' #Change 5433 testing
+        port='5432' #Change 5433 testing
     )
 
 # Pulls private variables from Google Cloud hosted in their Secrets Manager
@@ -30,8 +30,8 @@ def access_secret(project_id: str, secret_id: str, version: str = "latest") -> s
         my_logger.error(f"Error in 'access_secret' function: {e}")
 
 
-# project_id = "discord-bit-468008"   
-# db_password = access_secret(project_id, "BotDatabasePassword")
+project_id = "discord-bit-468008"   
+db_password = access_secret(project_id, "BotDatabasePassword")
 
 
 def build_embed_message(data, profile_url, profile_name, profile_image):

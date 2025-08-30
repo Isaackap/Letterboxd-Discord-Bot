@@ -5,15 +5,15 @@ from dotenv import load_dotenv
 from scraping import firstScrape, diaryScrape, favoriteFilmsScrape, profileImageOnReady
 from helper import build_embed_message, update_last_entry, check_channel, access_secret
 
-load_dotenv()
-token = os.getenv("DISCORD_TOKEN_TEST")
-db_password = os.getenv("DB_PASSWORD")
-api_key = os.getenv("OMDb_API_KEY")
+# load_dotenv()
+# token = os.getenv("DISCORD_TOKEN_TEST")
+# db_password = os.getenv("DB_PASSWORD")
+# api_key = os.getenv("OMDb_API_KEY")
 
-# project_id = "discord-bit-468008"
-# token = access_secret(project_id, "BotToken")   
-# db_password = access_secret(project_id, "BotDatabasePassword")
-# api_key = access_secret(project_id, "OMDb_API_KEY")
+project_id = "discord-bit-468008"
+token = access_secret(project_id, "BotToken")   
+db_password = access_secret(project_id, "BotDatabasePassword")
+api_key = access_secret(project_id, "OMDb_API_KEY")
 
 MAX_USER_COUNT_PER_SERVER = 50
 TASK_LOOP_INTERVAL = 30
@@ -24,7 +24,7 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5433' #Change 5433 testing
+        port='5432' #Change 5433 testing
     )
 
 # Logger setup for all custom code logging
@@ -98,23 +98,23 @@ async def on_ready():
         # I had added the 'profile_image' column to the database.
         # Any users added after this change will be added correctly in the /add command section
         # This should only need to be ran once after implementation, will possibly delete/comment out after that.
-        # cur.execute("SELECT profile_name FROM diary_users")
-        # results = cur.fetchall()
-        # for result in results: 
-        #     user = result[0] 
-        #     profile_image = profileImageOnReady(user)
-        #     if profile_image:
-        #         try:
-        #             update_query = """UPDATE diary_users 
-        #                             SET updated_at = now(), profile_image = %s
-        #                             WHERE profile_name = %s"""
-        #             cur.execute(update_query, (profile_image, user))
-        #         except psycopg2.Error as e:
-        #             my_logger.error(f"Failed to insert profile_image for {user}: {e}")
-        #         else:
-        #             conn.commit()
-        #     else:
-        #         my_logger.error(f"Failed to grab profile image for {user}")
+        cur.execute("SELECT profile_name FROM diary_users")
+        results = cur.fetchall()
+        for result in results: 
+            user = result[0] 
+            profile_image = profileImageOnReady(user)
+            if profile_image:
+                try:
+                    update_query = """UPDATE diary_users 
+                                    SET updated_at = now(), profile_image = %s
+                                    WHERE profile_name = %s"""
+                    cur.execute(update_query, (profile_image, user))
+                except psycopg2.Error as e:
+                    my_logger.error(f"Failed to insert profile_image for {user}: {e}")
+                else:
+                    conn.commit()
+            else:
+                my_logger.error(f"Failed to grab profile image for {user}")
 
         synced = await bot.tree.sync()
         my_logger.info(f"Synced {len(synced)} command(s)")
