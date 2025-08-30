@@ -56,6 +56,14 @@ def filmRewatch(data):
     if "icon-status-off" in data.get("class", []):
         return False
     return True
+
+def profileImage(data):
+    nav_bar = data.nav
+    if nav_bar:
+        image_url = nav_bar.find("img")
+        return image_url["src"]
+    else:
+        return False
     
 
 # Initial scrape when a new user is added
@@ -83,8 +91,9 @@ def firstScrape(profile):
             film_review = filmReview(review)
             diary_url = diaryURL(details)
             film_rewatch = filmRewatch(rewatch)
+            profile_image = profileImage(doc)
             #filmImage(details)
-            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch
+            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, profile_image
         else:
             return "no_entry"
     except Exception as e:
@@ -101,6 +110,7 @@ def diaryScrape(profile, entry):
     film_review = []
     diary_url = []
     film_rewatch = []
+    throwaway_list = []
     #sleep(5.0) 
 
     try:
@@ -135,9 +145,10 @@ def diaryScrape(profile, entry):
                 film_review.append(filmReview(review))
                 diary_url.append(diaryURL(details))
                 film_rewatch.append(filmRewatch(rewatch))
+                throwaway_list.append("pass")
                 #filmImage(details)
                 
-            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch
+            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, throwaway_list
         else:
             return False, None
         
@@ -236,11 +247,31 @@ def watchlistScrape(profile):
 
 # if __name__ == "__main__":
     # list = watchlistScrape("isaackap")
-    # list = firstScrape("alfieg97")
+    # list = firstScrape("isaackap")
     # list = favoriteFilmsScrape("isaackap")
     # print(list)
 
-
+# Created only for the single-use function in the bot's on_ready()
+# Used to grab profile avatar images for database storage
+def profileImageOnReady(profile):
+    url = f"https://letterboxd.com/{profile}/films/diary/"
+    try:
+        result = requests.get(url, headers=headers)
+        if result.status_code != 200:
+                my_logger.error(f"Failed to fetch page (status {result.status_code})")
+                return False
+        doc = BeautifulSoup(result.text, "html.parser")
+        user = doc.find(["title"])
+        if not user or "not found" in user.text.lower():
+            my_logger.info(f"Invalid or non-existent user: {profile}")
+            return False
+        
+        profile_image = profileImage(doc)
+        return profile_image
+        
+    except Exception as e:
+        my_logger.error(f"Error retrieving {profile} info: {e}")
+        return False
 
 # Was mostly used to test the scraping before the bot was created
 # Currently not called anywhere
