@@ -559,16 +559,16 @@ async def film_search(interaction: discord.interactions, arg: str):
     # Currently not restricing this command to the set channel
     # since I would like to be able to use this command anywhere.
     # May change later
-    # guild_id = interaction.guild.id
-    # channel_id = interaction.channel.id
+    guild_id = interaction.guild.id
+    channel_id = interaction.channel.id
 
-    # channel_check, stored_channel_id = check_channel(channel_id, guild_id)
-    # if channel_check == "no_exist":
-    #     await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
-    #     return
-    # elif channel_check == "no_match":
-    #     await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
-    #     return
+    channel_check, stored_channel_id = check_channel(channel_id, guild_id)
+    if channel_check == "no_exist":
+        await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
+        return
+    elif channel_check == "no_match":
+        await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
+        return
 
     try:
         response = requests.get(url, headers=headers, params=params)
