@@ -510,6 +510,14 @@ async def update_channel(interaction: discord.interactions, arg: TextChannel):
 async def favorite_films(interaction: discord.interactions, arg: str):
     guild_id = interaction.guild.id
     channel_id = interaction.channel.id
+    profile_name = arg.lower()
+    profile_url = f"https://letterboxd.com/{profile_name}/"
+
+    url = f"http://www.omdbapi.com/?apikey={api_key}&"
+    headers = {
+        "X-API-Key": api_key,
+        "Accept": "applications/json"
+    }
 
     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
     if channel_check == "no_exist":
@@ -529,14 +537,69 @@ async def favorite_films(interaction: discord.interactions, arg: str):
             await interaction.response.send_message("Failed to find users favorite films. Check spelling or try again later.", ephemeral=True)
             return
         
-        description = "\n".join(f"• {title}" for title in results)
-        embed = Embed(
-            title=f"{arg}'s Favorite Films",
-            description=description,
-            color=0x1DB954
-        )
+        titles = []
+        years = []
+        movie_posters = []
+        movie_titles = []
+        for movie in results:
+            split_movie = movie.split('(')
+            title = split_movie[0].strip()
+            titles.append(title)
+            year = split_movie[1].strip(')')
+            years.append(year)
+
+        try:    
+                for i in range(len(titles)):
+                    params = {
+                        "t": titles[i],
+                        "y": years[i],
+                        "type": "movie"
+                    }
+                    response = requests.get(url, headers=headers, params=params)
+                    data = response.json()
+
+                    if response.ok:
+                        movie_posters.append(data["Poster"])
+                    else:
+                        movie_titles.append(f"{titles[i]} ({years[i]})")
+                        my_logger.error(f"'/favorite' API call response returned false. Status Code: {response.status_code}")
+                        try:
+                            error_json = response.json()
+                            my_logger.error(f"Error Message: {error_json.get("message", "No message provided.")}")
+                        except ValueError:
+                            my_logger.error(f"Raw Error: {response.text}")   
+
+        except Exception as e:
+            my_logger.error(f"Error in '/favorite' API call: {e}")
+            for i in range(len(titles)):
+                movie_titles.append(f"{titles[i]} ({years[i]})")
         
-        await interaction.response.send_message(embed=embed)
+        embeds = []
+        for poster in movie_posters:
+            embed = Embed(title=f"{arg}'s Favorite Films", url=profile_url, color=0x1DB954).set_image(url=poster)
+            embeds.append(embed)
+
+        # Fallback if api calls failed, send message with only titles+years and no images/posters
+        if movie_titles:
+            description = "\n".join(f"• {title}" for title in movie_titles)
+            title_embed = Embed(
+                title=f"{arg}'s Favorite Films",
+                url=profile_url,
+                description=description,
+                color=0x1DB954
+            )
+            embeds.append(title_embed)
+
+
+
+        # description = "\n".join(f"• {title}" for title in results)
+        # embed = Embed(
+        #     title=f"{arg}'s Favorite Films",
+        #     description=description,
+        #     color=0x1DB954
+        # )
+        
+        await interaction.response.send_message(embeds=embeds)
 
     except Exception as e:
         my_logger.error(f"Error in /favorites: {e}")

@@ -181,8 +181,8 @@ def favoriteFilmsScrape(profile):
             if ulist:
                 list_items = ulist.find_all("li", class_="posteritem favourite-film-poster-container")
                 for item in list_items:
-                    img = item.find("img")
-                    title = img["alt"]
+                    img = item.find("div", class_= "react-component")
+                    title = img["data-item-name"]
                     titles.append(title)
         
     except Exception as e:
