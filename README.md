@@ -91,7 +91,7 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 ### Future updates currently planned. No guarantee they are added
 
 - [ ] `/watchlistpick <profile_name>` - grabs a users' watchlist and randomly selects one film from the list.
-- [ ] Movie images. Currently images cannot be scraped from Letterboxd, will look into getting them some other way to include in posts.
+- [x] Movie images. Currently images cannot be scraped from Letterboxd, will look into getting them some other way to include in posts.
 - [x] `/film <film_name>` - grabs the info such as name, year, synopsis, director, or actors for a specified film.
 
 ---
@@ -111,5 +111,3 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 - [Privacy Policy](PRIVACY_POLICY.md)
 
 ---
-
-
