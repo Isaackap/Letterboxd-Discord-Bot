@@ -58,7 +58,7 @@ Displays the list of currently tracked Letterboxd users in the server.
 
 Post the Letterboxd users' favorite films listed on their profile page.
 
-### '/film <film_name>'
+### `/film <film_name>`
 
 Post a film's general info such as title, release year, director, rating, runtime, etc.
 
@@ -111,4 +111,5 @@ The bot runs a background task every 30 minutes (Subject to change based on serv
 - [Privacy Policy](PRIVACY_POLICY.md)
 
 ---
+
 
