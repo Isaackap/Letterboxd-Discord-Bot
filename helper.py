@@ -1,13 +1,9 @@
 from discord import Embed
-import psycopg2, os, logging, requests
-from dotenv import load_dotenv
-from google.cloud import secretmanager
+import psycopg2, logging, requests
+from config import db_password, api_key, db_port
 
 my_logger = logging.getLogger("mybot")
 
-# load_dotenv()
-# db_password = os.getenv("DB_PASSWORD")
-# api_key = os.getenv("OMDb_API_KEY")
 
 def get_db_connection():
     return psycopg2.connect(
@@ -15,25 +11,13 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5432' #Change 5433 testing
+        port=db_port
     )
 
-# Pulls private variables from Google Cloud hosted in their Secrets Manager
-def access_secret(project_id: str, secret_id: str, version: str = "latest") -> str:
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        name = f"projects/{project_id}/secrets/{secret_id}/versions/{version}"
 
-        response = client.access_secret_version(name=name)
-        secret_value = response.payload.data.decode("UTF-8")
-        return secret_value
-    except Exception as e:
-        my_logger.error(f"Error in 'access_secret' function: {e}")
-
-
-project_id = "discord-bit-468008"   
-db_password = access_secret(project_id, "BotDatabasePassword")
-api_key = access_secret(project_id, "OMDb_API_KEY")
+# project_id = "discord-bit-468008"   
+# db_password = access_secret(project_id, "BotDatabasePassword")
+# api_key = access_secret(project_id, "OMDb_API_KEY")
 
 
 def build_embed_message(data, profile_url, profile_name, profile_image):

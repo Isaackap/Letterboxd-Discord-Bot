@@ -1,22 +1,10 @@
-import discord, os, logging, psycopg2, asyncio, logging, requests
+import discord, logging, psycopg2, asyncio, logging, requests
 from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
-from dotenv import load_dotenv
+from config import token, db_password, api_key, db_port, MAX_USER_COUNT_PER_SERVER, TASK_LOOP_INTERVAL
 from scraping import firstScrape, diaryScrape, favoriteFilmsScrape, profileImageOnReady
-from helper import build_embed_message, update_last_entry, check_channel, access_secret
+from helper import build_embed_message, update_last_entry, check_channel
 
-# load_dotenv()
-# token = os.getenv("DISCORD_TOKEN_TEST")
-# db_password = os.getenv("DB_PASSWORD")
-# api_key = os.getenv("OMDb_API_KEY")
-
-project_id = "discord-bit-468008"
-token = access_secret(project_id, "BotToken")   
-db_password = access_secret(project_id, "BotDatabasePassword")
-api_key = access_secret(project_id, "OMDb_API_KEY")
-
-MAX_USER_COUNT_PER_SERVER = 50
-TASK_LOOP_INTERVAL = 30
 
 def get_db_connection():
     return psycopg2.connect(
@@ -24,7 +12,7 @@ def get_db_connection():
         database="discordbotdb",
         user="postgres",
         password=db_password,
-        port='5432' #Change 5433 testing
+        port=db_port
     )
 
 # Logger setup for all custom code logging
