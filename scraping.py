@@ -179,7 +179,7 @@ def favoriteFilmsScrape(profile):
             return "No favorites"
         else:
             if ulist:
-                list_items = ulist.find_all("li", class_="posteritem favourite-film-poster-container")
+                list_items = ulist.find_all("li", class_="posteritem favourite-production-poster-container")
                 for item in list_items:
                     img = item.find("div", class_= "react-component")
                     title = img["data-item-name"]
