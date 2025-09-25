@@ -16,3 +16,4 @@ discord.log
 *.sql
 *.txt
 *.log
+local_files/
