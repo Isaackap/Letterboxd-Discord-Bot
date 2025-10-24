@@ -10,7 +10,7 @@ TASK_LOOP_INTERVAL = 30  # in minutes
 
 # Comment out the load_dotenv and os.getenv lines when deploying to Google Cloud
 # Soley used for local testing with a .env file
-# load_dotenv()
+# load_dotenv(dotenv_path="./local_files/.env")
 # token = os.getenv("DISCORD_TOKEN_TEST")
 # db_password = os.getenv("DB_PASSWORD")
 # api_key = os.getenv("OMDb_API_KEY")

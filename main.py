@@ -687,6 +687,10 @@ async def film_search(interaction: discord.interactions, arg: str):
 async def diary_loop():
     my_logger.info("Task loop has began.")
 
+    no_entry_users = {}
+    new_entry_users = {}
+    channel_cache = {}
+
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -698,32 +702,74 @@ async def diary_loop():
         conn.close()
 
         for channel_id, server_id, profile_name, last_entry, profile_url, profile_image in results:
-            await asyncio.sleep(1.0)
-            try:
-                channel = await bot.fetch_channel(channel_id)
-                if isinstance(channel, discord.TextChannel):
+            if profile_name in no_entry_users:
+                continue
+            
+            if channel_id in channel_cache:
+                channel = channel_cache[channel_id]
+            else:
+                try:
+                    channel = await bot.fetch_channel(channel_id)
+                    channel_cache[channel_id] = channel
+                except discord.NotFound:
+                    my_logger.warning(f"Channel {channel_id} not found.")
+                    continue
+                except discord.Forbidden:
+                    my_logger.warning(f"Missing permissions to access channel {channel_id} of server {server_id}")
+                    continue
+                except Exception as e:
+                    my_logger.error(f"Error fetching channel {channel_id}: {e}")
+                    continue
+            
+            if not isinstance(channel, discord.TextChannel):
+                my_logger.warning(f"Channel {channel_id} is not a text channel.")
+                continue
+
+            if profile_name not in new_entry_users:
+                await asyncio.sleep(1.0)  # To help with rate limiting issues, only when scraping
+
+                try:
                     result = await asyncio.to_thread(diaryScrape, profile_name, last_entry)
                     if not result[0]:
+                        no_entry_users[profile_name] = server_id
                         continue
-                    else:
-                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
-                        await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
 
-                        #await channel.send(f"{profile_name}'s New Diary Entries:")
-                        for message in embed:
-                            await channel.send(embed=message)
-                            await asyncio.sleep(0.5)
-            except discord.NotFound:
-                my_logger.warning(f"Channel {channel_id} not found.")
-            except discord.Forbidden:
-                my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
-            except Exception as e:
-                my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
+                    embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
+                    await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
+                    new_entry_users[profile_name] = (embed, film_title)
+              
+                    for message in embed:
+                        await channel.send(embed=message)
+                        await asyncio.sleep(0.5)
+
+                except discord.NotFound:
+                    my_logger.warning(f"Channel {channel_id} not found.")
+                except discord.Forbidden:
+                    my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
+                except Exception as e:
+                    my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
+            else:
+                try:
+                    embed, film_title = new_entry_users[profile_name]
+                    await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
+                        
+                    for message in embed:
+                        await channel.send(embed=message)
+                        await asyncio.sleep(0.5)
+
+                except discord.NotFound:
+                    my_logger.warning(f"Channel {channel_id} not found.")
+                except discord.Forbidden:
+                    my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
+                except Exception as e:
+                    my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
 
     except Exception as e:
         my_logger.error(f"Scheduled task failed: {e}")
 
     my_logger.info("Task loop has finished.")
+    my_logger.debug(f"Users with no new entries this loop: {no_entry_users.keys()}")
+    my_logger.debug(f"Users with new entries this loop: {new_entry_users.keys()}")
 
 
 @diary_loop.before_loop
