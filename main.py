@@ -1,8 +1,8 @@
-import discord, logging, psycopg2, asyncio, logging, requests
+import discord, logging, psycopg2, asyncio, logging, requests, random
 from discord.ext import commands, tasks
 from discord import app_commands, Embed, TextChannel
 from config import token, db_password, api_key, db_port, MAX_USER_COUNT_PER_SERVER, TASK_LOOP_INTERVAL
-from scraping import firstScrape, diaryScrape, favoriteFilmsScrape, profileImageOnReady
+from scraping import firstScrape_rss, diaryScrape_rss, favoriteFilmsScrape, profileImageOnReady
 from helper import build_embed_message, update_last_entry, check_channel
 
 
@@ -32,6 +32,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+rss_semaphore = asyncio.Semaphore(1)
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -272,7 +273,7 @@ async def add(interaction: discord.Interaction, arg: str):
         cur.execute(insert_query, (profile_name, guild_id, profile_url))
 
         if cur.rowcount > 0:    # Checks if the insert_query execute before updating
-            result = firstScrape(profile_name)
+            result = firstScrape_rss(profile_name)
             if not result or result[0] is False:
                 conn.rollback()
                 cur.close()
@@ -284,7 +285,7 @@ async def add(interaction: discord.Interaction, arg: str):
                     profile_image = result[7]
                     embed, film_title = build_embed_message(result, profile_url, profile_name, profile_image)
                 else:
-                    film_title = result
+                    film_title, profile_image = result[0], result[1]
             try:
                 server_update_query = """UPDATE discord_servers
                 SET user_count = user_count + 1, updated_at = now()
@@ -726,28 +727,29 @@ async def diary_loop():
                 continue
 
             if profile_name not in new_entry_users:
-                await asyncio.sleep(1.0)  # To help with rate limiting issues, only when scraping
+                #await asyncio.sleep(random.randint(1, 3))  # To help with rate limiting issues, only when scraping
+                async with rss_semaphore:
+                    try:
+                        result = await asyncio.to_thread(diaryScrape_rss, profile_name, last_entry)
+                        await asyncio.sleep(1)
+                        if not result[0]:
+                            no_entry_users[profile_name] = server_id
+                            continue
 
-                try:
-                    result = await asyncio.to_thread(diaryScrape, profile_name, last_entry)
-                    if not result[0]:
-                        no_entry_users[profile_name] = server_id
-                        continue
+                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
+                        await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
+                        new_entry_users[profile_name] = (embed, film_title)
+                
+                        for message in embed:
+                            await channel.send(embed=message)
+                            await asyncio.sleep(0.5)
 
-                    embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
-                    await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
-                    new_entry_users[profile_name] = (embed, film_title)
-              
-                    for message in embed:
-                        await channel.send(embed=message)
-                        await asyncio.sleep(0.5)
-
-                except discord.NotFound:
-                    my_logger.warning(f"Channel {channel_id} not found.")
-                except discord.Forbidden:
-                    my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
-                except Exception as e:
-                    my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
+                    except discord.NotFound:
+                        my_logger.warning(f"Channel {channel_id} not found.")
+                    except discord.Forbidden:
+                        my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
+                    except Exception as e:
+                        my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
             else:
                 try:
                     embed, film_title = new_entry_users[profile_name]

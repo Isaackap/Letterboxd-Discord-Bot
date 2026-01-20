@@ -5,7 +5,7 @@ from time import sleep
 my_logger = logging.getLogger("mybot")
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
     }  
 
 
@@ -58,18 +58,30 @@ def filmRewatch(data):
     return True
 
 def profileImage(data):
-    nav_bar = data.nav
-    if nav_bar:
-        image_url = nav_bar.find("img")
-        return image_url["src"]
-    else:
+    url = f"https://letterboxd.com/{data}/"
+    
+    try:
+        result = requests.get(url, headers=headers)
+        if result.status_code != 200:
+                my_logger.error(f"Failed to fetch page (status {result.status_code}) for {data}")
+                return False
+        
+        doc = BeautifulSoup(result.text, "html.parser")
+        span = doc.find("span", class_="avatar -a110 -large")
+        if span:
+            image_url = span.find("img")
+            return image_url["src"]
+        else:
+            return False
+    except Exception as e:
+        my_logger.error(f"Error retrieving {data} info: {e}")
         return False
     
 
-# Initial scrape when a new user is added
+# Initial HTML scrape when a new user is added
 # Also is used as a verification if the added username exist on Letterboxd
 def firstScrape(profile):
-    url = f"https://letterboxd.com/{profile}/films/diary/"
+    url = f"https://letterboxd.com/{profile}/diary/"
     UNMATCHABLE_TITLE = "__UNMATCHABLE__"
     try:
         result = requests.get(url, headers=headers)
@@ -100,10 +112,50 @@ def firstScrape(profile):
         my_logger.error(f"Error retrieving {profile} info: {e}")
         return False
     
-# Scraping performed during the diary task loop
+
+# Initial RSS scrape when a new user is added
+# Also is used as a verification if the added username exist on Letterboxd
+def firstScrape_rss(profile):
+    url = f"https://letterboxd.com/{profile}/rss/"
+    UNMATCHABLE_TITLE = "__UNMATCHABLE__"
+    try:
+        result = requests.get(url, timeout=10)
+        if result.status_code != 200:
+                my_logger.error(f"Failed to fetch page (status {result.status_code})")
+                return False
+        
+        doc = BeautifulSoup(result.text, "xml")
+        channel = doc.find("channel")
+        if not channel:
+            my_logger.info(f"Invalid or non-existent user: {profile}. Or not a valid RSS feed.")
+            return False
+        items = doc.find_all("item")
+        
+        if not items:
+            profile_image = profileImage(profile)
+
+            return "no_entry", profile_image
+        else:
+            item = items[0]
+
+            film_title = item.find("letterboxd:filmTitle").string
+            film_release = item.find("letterboxd:filmYear").string
+            film_rating = item.find("letterboxd:memberRating").string if item.find("letterboxd:memberRating") else "0"
+            film_review = False # Set to false until review scraping is implemented
+            diary_url = item.find("link").string
+            film_rewatch = False if item.find("letterboxd:rewatch").string == "No" else True
+            profile_image = profileImage(profile)
+            #filmImage(details)
+            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, profile_image
+    except Exception as e:
+        my_logger.error(f"Error retrieving {profile} info: {e}")
+        return False
+
+    
+# HTML Scraping performed during the diary task loop
 # Configured to only scrape the 5 most recent entries so to not spam a channel's chat if there are more to grab
 def diaryScrape(profile, entry):
-    url = f"https://letterboxd.com/{profile}/films/diary/"
+    url = f"https://letterboxd.com/{profile}/diary/"
     film_title = []
     film_release = []
     film_rating = []
@@ -117,6 +169,9 @@ def diaryScrape(profile, entry):
         result = requests.get(url, headers=headers)
         if result.status_code != 200:
                 my_logger.error(f"Failed to fetch page (status {result.status_code})")
+                my_logger.debug(f"URL attempted: {url}")
+                my_logger.debug(f"Headers used: {result.headers}")
+                my_logger.debug(f"Response text: {result.text[:500]}")
                 return False, None
         doc = BeautifulSoup(result.text, "html.parser")
         user = doc.find(["title"])
@@ -155,6 +210,72 @@ def diaryScrape(profile, entry):
     except Exception as e:
         my_logger.error(f"Error retrieving {profile} info: {e}")
         return False, None
+    
+
+# RSS Scraping performed during the diary task loop
+# Configured to only scrape the 5 most recent entries so to not spam a channel's chat if there are more to grab
+def diaryScrape_rss(profile, entry):
+    url = f"https://letterboxd.com/{profile}/rss/"
+    film_title = []
+    film_release = []
+    film_rating = []
+    film_review = []
+    diary_url = []
+    film_rewatch = []
+    throwaway_list = []
+    #sleep(5.0) 
+
+    try:
+        result = requests.get(url, timeout=10)
+        if result.status_code != 200:
+                my_logger.error(f"Failed to fetch page (status {result.status_code})")
+                return False, None
+        
+        doc = BeautifulSoup(result.text, "xml")
+        channel = doc.find("channel")
+        if not channel:
+            my_logger.info(f"Invalid or non-existent user: {profile}. Or not a valid RSS feed.")
+            return False, None
+        
+        items = doc.find_all("item")[:5]
+        first = True
+
+        if not items:
+            return False, None
+        
+        for item in items[:5]:
+            title = item.find("letterboxd:filmTitle").string
+            if title == entry:
+                if first:
+                    #print("No new entries", profile)
+                    return False, None
+                else:
+                    break
+            first = False
+
+            released = item.find("letterboxd:filmYear").string
+            rating = item.find("letterboxd:memberRating").string if item.find("letterboxd:memberRating") else "0"
+            link = item.find("link").string
+            if item.find("letterboxd:rewatch").string == "No":
+                rewatch = False
+            else:
+                rewatch = True
+                
+            film_title.append(title)
+            film_release.append(released)
+            film_rating.append(rating)
+            film_review.append(False) # Set to false until review scraping is implemented
+            diary_url.append(link)
+            film_rewatch.append(rewatch)
+            throwaway_list.append("pass")
+            #filmImage(details)
+                
+        return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, throwaway_list
+        
+    except Exception as e:
+        my_logger.error(f"Error retrieving {profile} info: {e}")
+        return False, None
+
 
 # Scraping for users' favorite films listed on profile
 def favoriteFilmsScrape(profile):
@@ -254,7 +375,7 @@ def watchlistScrape(profile):
 # Created only for the single-use function in the bot's on_ready()
 # Used to grab profile avatar images for database storage
 def profileImageOnReady(profile):
-    url = f"https://letterboxd.com/{profile}/films/diary/"
+    url = f"https://letterboxd.com/{profile}/diary/"
     try:
         result = requests.get(url, headers=headers)
         if result.status_code != 200:
@@ -276,7 +397,7 @@ def profileImageOnReady(profile):
 # Was mostly used to test the scraping before the bot was created
 # Currently not called anywhere
 def scrapeSite(profile):
-    url = f"https://letterboxd.com/{profile}/films/diary/"
+    url = f"https://letterboxd.com/{profile}/diary/"
     try:
         result = requests.get(url, headers=headers)
         doc = BeautifulSoup(result.text, "html.parser")
