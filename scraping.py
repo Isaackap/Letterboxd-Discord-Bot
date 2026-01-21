@@ -5,7 +5,9 @@ from time import sleep
 my_logger = logging.getLogger("mybot")
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "Accept": "applications/rss+xml, application/xml;q=0.9, */*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
     }  
 
 
@@ -119,7 +121,7 @@ def firstScrape_rss(profile):
     url = f"https://letterboxd.com/{profile}/rss/"
     UNMATCHABLE_TITLE = "__UNMATCHABLE__"
     try:
-        result = requests.get(url, timeout=10)
+        result = requests.get(url, headers=headers, timeout=10)
         if result.status_code != 200:
                 my_logger.error(f"Failed to fetch page (status {result.status_code})")
                 return False
@@ -226,7 +228,7 @@ def diaryScrape_rss(profile, entry):
     #sleep(5.0) 
 
     try:
-        result = requests.get(url, timeout=10)
+        result = requests.get(url, headers=headers, timeout=10)
         if result.status_code != 200:
                 my_logger.error(f"Failed to fetch page (status {result.status_code})")
                 return False, None

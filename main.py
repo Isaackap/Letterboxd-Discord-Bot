@@ -32,7 +32,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-rss_semaphore = asyncio.Semaphore(1)
+#rss_semaphore = asyncio.Semaphore(1)
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -727,29 +727,28 @@ async def diary_loop():
                 continue
 
             if profile_name not in new_entry_users:
-                #await asyncio.sleep(random.randint(1, 3))  # To help with rate limiting issues, only when scraping
-                async with rss_semaphore:
-                    try:
-                        result = await asyncio.to_thread(diaryScrape_rss, profile_name, last_entry)
-                        await asyncio.sleep(1)
-                        if not result[0]:
-                            no_entry_users[profile_name] = server_id
-                            continue
+                await asyncio.sleep(random.randint(1, 3))  # To help with rate limiting issues, only when scraping
 
-                        embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
-                        await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
-                        new_entry_users[profile_name] = (embed, film_title)
+                try:
+                    result = await asyncio.to_thread(diaryScrape_rss, profile_name, last_entry)
+                    if not result[0]:
+                        no_entry_users[profile_name] = server_id
+                        continue
+
+                    embed, film_title = await asyncio.to_thread(build_embed_message, result, profile_url, profile_name, profile_image)
+                    await asyncio.to_thread(update_last_entry, server_id, profile_name, film_title)
+                    new_entry_users[profile_name] = (embed, film_title)
                 
-                        for message in embed:
-                            await channel.send(embed=message)
-                            await asyncio.sleep(0.5)
+                    for message in embed:
+                        await channel.send(embed=message)
+                        await asyncio.sleep(0.5)
 
-                    except discord.NotFound:
-                        my_logger.warning(f"Channel {channel_id} not found.")
-                    except discord.Forbidden:
-                        my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
-                    except Exception as e:
-                        my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
+                except discord.NotFound:
+                    my_logger.warning(f"Channel {channel_id} not found.")
+                except discord.Forbidden:
+                    my_logger.warning(f"Missing permissions to send in channel {channel_id} of server {server_id}")
+                except Exception as e:
+                    my_logger.error(f"Error sending Task Loop message to {channel_id}, {profile_name}: {e}")
             else:
                 try:
                     embed, film_title = new_entry_users[profile_name]
