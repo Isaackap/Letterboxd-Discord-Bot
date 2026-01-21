@@ -83,7 +83,7 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
                 rating_embeded = "*No rating provided.*"
             else:
                 try:
-                    float_rating = float(rating) / 2
+                    float_rating = float(rating)
                     stars = int(float_rating)
                     half_star = float_rating % 1 >= 0.5
                     
