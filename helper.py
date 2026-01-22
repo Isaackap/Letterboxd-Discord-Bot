@@ -1,6 +1,6 @@
 from discord import Embed
-import psycopg2, logging, requests
-from config import db_password, api_key, db_port
+import psycopg2, logging
+from config import db_password, db_port
 
 my_logger = logging.getLogger("mybot")
 
@@ -15,21 +15,9 @@ def get_db_connection():
     )
 
 
-# project_id = "discord-bit-468008"   
-# db_password = access_secret(project_id, "BotDatabasePassword")
-# api_key = access_secret(project_id, "OMDb_API_KEY")
-
-
-def build_embed_message(data, profile_url, profile_name, profile_image):
-    url = f"http://www.omdbapi.com/?apikey={api_key}&"
-    headers = {
-        "X-API-Key": api_key,
-        "Accept": "applications/json"
-    }
-    
+def build_embed_message(data, profile_url, profile_name, profile_image): 
     try:
-        #my_logger.debug(data, profile_url, profile_name)
-        _, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, throwaway_var = data
+        _, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, film_poster, throwaway_var = data
         embed_list = []
         profile_url = profile_url
         profile_name = profile_name
@@ -42,6 +30,7 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
             film_review = [film_review]
             diary_url = [diary_url]
             film_rewatch = [film_rewatch]
+            film_poster = [film_poster]
 
         latest_entry = film_title[0]
 
@@ -52,32 +41,7 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
             review = film_review[i]
             diary = diary_url[i]
             rewatch = film_rewatch[i]
-            
-            params = {
-                "t": title,
-                "y": release,
-                "type": "movie"
-            }
-
-            try:
-                response = requests.get(url, headers=headers, params=params)
-                #print(response.json())
-                data = response.json()
-
-                if response.ok:
-                    movie_poster = data["Poster"]
-                else:
-                    movie_poster = False
-                    my_logger.error(f"build_embed_message() API call response returned false. Status Code: {response.status_code}")
-                    try:
-                        error_json = response.json()
-                        my_logger.error(f"Error Message: {error_json.get("message", "No message provided.")}")
-                    except ValueError:
-                        my_logger.error(f"Raw Error: {response.text}")   
-
-            except Exception as e:
-                my_logger.error(f"Error in build_embed_message() API call: {e}")
-                movie_poster = False
+            poster_url = film_poster[i]
 
             if rating == '0':
                 rating_embeded = "*No rating provided.*"
@@ -103,9 +67,9 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
                     color=0x1DB954
                 )
             
-            if movie_poster:
-                embed.set_thumbnail(url=movie_poster)
-            
+            if poster_url:
+                embed.set_thumbnail(url=poster_url)
+
             if not rewatch:
                 embed.set_author(
                     name=f"{profile_name} Watched 🎦",
@@ -127,7 +91,9 @@ def build_embed_message(data, profile_url, profile_name, profile_image):
                 )
             
             embed_list.append(embed)
+
         return embed_list, latest_entry
+    
     except Exception as e:
         my_logger.error(f"Error in 'build_embed_message': {e}")
 
