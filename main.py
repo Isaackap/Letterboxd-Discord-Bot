@@ -32,7 +32,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-#rss_semaphore = asyncio.Semaphore(1)
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -166,6 +165,7 @@ async def on_guild_remove(guild):
         if conn: conn.close()
 
 
+# Help command to list all bot commands and their descriptions
 @bot.tree.command(name="help", description="List all bot commands and their descriptions.")
 async def help_command(interaction: discord.Interaction):
     embed = Embed(
@@ -240,6 +240,7 @@ async def add(interaction: discord.Interaction, arg: str):
     profile_name = arg.lower()
     profile_url = f"https://letterboxd.com/{profile_name}/"
     
+    # Check if the command is used in the correct channel
     channel_check, stored_channel_id = check_channel(channel_id, guild_id)
     if channel_check == "no_exist":
         await interaction.response.send_message("❗ Bot is not configured for this server yet. Use `/setchannel` first.", ephemeral=True)
@@ -248,6 +249,7 @@ async def add(interaction: discord.Interaction, arg: str):
         await interaction.response.send_message(f"❌ Bot commands must be used in <#{stored_channel_id}>.", ephemeral=True)
         return
     
+    # Basic validation for username length
     if len(profile_name) > 15 or len(profile_name) < 2:
         await interaction.response.send_message(f"❌ Failed to get {profile_name} Letterboxd data, make sure input is a valid profile.")
         return
@@ -282,7 +284,7 @@ async def add(interaction: discord.Interaction, arg: str):
                 return
             else:
                 if result[0] is True:
-                    profile_image = result[7]
+                    profile_image = result[8]
                     embed, film_title = build_embed_message(result, profile_url, profile_name, profile_image)
                 else:
                     film_title, profile_image = result[0], result[1]
@@ -578,15 +580,6 @@ async def favorite_films(interaction: discord.interactions, arg: str):
                 color=0x1DB954
             )
             embeds.append(title_embed)
-
-
-
-        # description = "\n".join(f"• {title}" for title in results)
-        # embed = Embed(
-        #     title=f"{arg}'s Favorite Films",
-        #     description=description,
-        #     color=0x1DB954
-        # )
         
         await interaction.response.send_message(embeds=embeds)
 
@@ -624,7 +617,6 @@ async def film_search(interaction: discord.interactions, arg: str):
 
     try:
         response = requests.get(url, headers=headers, params=params)
-        #print(response.json())
         data = response.json()
 
         if response.ok:
@@ -678,6 +670,7 @@ async def film_search(interaction: discord.interactions, arg: str):
 #     #results = await asyncio.to_thread(watchlistScrape, arg)
 
 #     await interaction.response.send_message("This command is currently a work in progress")
+
 
 # Task loop set to perform every set interval
 # Grabs all users in the database and loops through each one to scrape their diary info
