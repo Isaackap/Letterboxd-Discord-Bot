@@ -40,12 +40,18 @@ def filmRating(data):
         return False
 
 def filmReview(data):
-    if "icon-status-off" in data.get("class", []):
-        return False
-    else:
-        partial_url = data.find("a")
-        full_url = f"https://letterboxd.com{partial_url["href"]}"
-        return full_url
+    description = data.find("description")
+
+    if description and description.text:
+        soup = BeautifulSoup(description.text, "html.parser")
+        p_tags = soup.find_all("p")
+        if len(p_tags) > 1:
+            review_text = p_tags[1].text.strip()
+            if review_text.startswith("Watched on "):
+                return False
+            else:
+                return data.find("link").string
+    return False
     
 def diaryURL(data):
     partial_url = data.find("a")
@@ -55,9 +61,21 @@ def diaryURL(data):
     return False
 
 def filmRewatch(data):
-    if "icon-status-off" in data.get("class", []):
+    if data.find("letterboxd:rewatch").string == "No":
         return False
+    
     return True
+
+def filmPoster(data):
+    description = data.find("description")
+
+    if description and description.text:
+        soup = BeautifulSoup(description.text, "html.parser")
+        img = soup.find("img")
+        if img and img.has_attr("src"):
+            return img["src"]
+        
+    return False
 
 def profileImage(data):
     url = f"https://letterboxd.com/{data}/"
@@ -143,12 +161,13 @@ def firstScrape_rss(profile):
             film_title = item.find("letterboxd:filmTitle").string
             film_release = item.find("letterboxd:filmYear").string
             film_rating = item.find("letterboxd:memberRating").string if item.find("letterboxd:memberRating") else "0"
-            film_review = False # Set to false until review scraping is implemented
+            film_review = filmReview(item)
             diary_url = item.find("link").string
             film_rewatch = False if item.find("letterboxd:rewatch").string == "No" else True
+            film_poster = filmPoster(item)
             profile_image = profileImage(profile)
             #filmImage(details)
-            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, profile_image
+            return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, film_poster, profile_image
     except Exception as e:
         my_logger.error(f"Error retrieving {profile} info: {e}")
         return False
@@ -224,8 +243,8 @@ def diaryScrape_rss(profile, entry):
     film_review = []
     diary_url = []
     film_rewatch = []
+    film_poster = []
     throwaway_list = []
-    #sleep(5.0) 
 
     try:
         result = requests.get(url, headers=headers, timeout=10)
@@ -249,7 +268,6 @@ def diaryScrape_rss(profile, entry):
             title = item.find("letterboxd:filmTitle").string
             if title == entry:
                 if first:
-                    #print("No new entries", profile)
                     return False, None
                 else:
                     break
@@ -258,10 +276,8 @@ def diaryScrape_rss(profile, entry):
             released = item.find("letterboxd:filmYear").string
             rating = item.find("letterboxd:memberRating").string if item.find("letterboxd:memberRating") else "0"
             link = item.find("link").string
-            if item.find("letterboxd:rewatch").string == "No":
-                rewatch = False
-            else:
-                rewatch = True
+            rewatch = filmRewatch(item)
+            poster_url = filmPoster(item)
                 
             film_title.append(title)
             film_release.append(released)
@@ -269,10 +285,11 @@ def diaryScrape_rss(profile, entry):
             film_review.append(False) # Set to false until review scraping is implemented
             diary_url.append(link)
             film_rewatch.append(rewatch)
+            film_poster.append(poster_url)
             throwaway_list.append("pass")
             #filmImage(details)
                 
-        return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, throwaway_list
+        return True, film_title, film_release, film_rating, film_review, diary_url, film_rewatch, film_poster, throwaway_list
         
     except Exception as e:
         my_logger.error(f"Error retrieving {profile} info: {e}")
